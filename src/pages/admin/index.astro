@@ -1,0 +1,41 @@
+---
+import Base from "../../layouts/Base.astro";
+
+const db = Astro.locals.runtime.env.DB;
+const [suscriptores, importaciones, ultimoAnio] = await Promise.all([
+  db.prepare("SELECT COUNT(*) as n FROM suscriptores WHERE activo = 1").first<{ n: number }>(),
+  db.prepare("SELECT COUNT(*) as n FROM importaciones").first<{ n: number }>(),
+  db.prepare("SELECT MAX(anio) as anio FROM ejecucion").first<{ anio: number | null }>(),
+]);
+
+const secciones = [
+  { n: "01", href: "/admin/suscriptores", titulo: "Suscriptos", desc: `${suscriptores?.n ?? 0} activos · exportar CSV` },
+  { n: "02", href: "/admin/avisos", titulo: "Avisos masivos", desc: "Redactar y enviar un aviso a los suscriptos" },
+  { n: "03", href: "/admin/importar", titulo: "Cargar datos", desc: `Subir registros F17 (.xlsx) · ${importaciones?.n ?? 0} importaciones` },
+];
+---
+
+<Base title="Panel administrativo" active="">
+  <section class="container" style="padding: 48px 24px;">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+      <div>
+        <span class="eyebrow">Dirección de Presupuesto</span>
+        <h1 style="font-size:2rem; margin-top:6px;">Panel administrativo</h1>
+        <p style="color:var(--color-gray-500);">Año de datos vigente: {ultimoAnio?.anio ?? "—"}</p>
+      </div>
+      <form method="post" action="/api/admin/logout">
+        <button class="btn btn-outline" type="submit" style="background:var(--color-gray-700);">Salir</button>
+      </form>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:24px; margin-top:32px;">
+      {secciones.map((s) => (
+        <a href={s.href} class="card" style="text-decoration:none; display:block;">
+          <div class="card__index">{s.n}</div>
+          <div class="card__title">{s.titulo}</div>
+          <p style="color:var(--color-gray-500); font-size:0.9rem; margin-top:10px;">{s.desc}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+</Base>

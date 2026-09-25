@@ -1,0 +1,34 @@
+---
+interface Props {
+  active?: string;
+}
+const { active } = Astro.props;
+
+const links = [
+  { href: "/", label: "Inicio", key: "inicio" },
+  { href: "/instructivos", label: "Instructivos", key: "instructivos" },
+  { href: "/formulario-17", label: "Formulario 17", key: "f17" },
+  { href: "/mailing", label: "Suscribirme", key: "mailing" },
+];
+---
+
+<header style="background: var(--color-ink);">
+  <nav class="container" style="display:flex; align-items:center; justify-content:space-between; padding-top:18px; padding-bottom:18px;">
+    <a href="/" style="display:flex; align-items:center; gap:12px; text-decoration:none;">
+      <span style="font-family:var(--font-display); color:#fff; font-size:1.1rem; letter-spacing:0.02em;">MUNICIPIO DE<br/>MORÓN</span>
+    </a>
+    <ul style="display:flex; gap:28px; list-style:none; margin:0; padding:0;">
+      {links.map((l) => (
+        <li>
+          <a
+            href={l.href}
+            style={`color:${active === l.key ? "#fff" : "var(--color-gray-400)"}; font-weight:600; font-size:0.92rem; border-bottom:${active === l.key ? "2px solid var(--color-primary)" : "2px solid transparent"}; padding-bottom:6px;`}
+          >
+            {l.label}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </nav>
+</header>
+<hr class="rule" />

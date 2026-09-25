@@ -1,0 +1,26 @@
+{
+  "name": "formulario-17",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "astro": "astro",
+    "db:migrate:local": "wrangler d1 migrations apply f17_db --local",
+    "db:migrate:remote": "wrangler d1 migrations apply f17_db --remote",
+    "import:xlsx": "node scripts/import-xlsx.mjs"
+  },
+  "dependencies": {
+    "@astrojs/cloudflare": "^11.1.0",
+    "astro": "^4.16.0",
+    "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.10",
+    "@cloudflare/workers-types": "^5.20260925.1",
+    "typescript": "^5.7.0",
+    "wrangler": "^4.140.0"
+  }
+}

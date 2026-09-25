@@ -1,0 +1,78 @@
+---
+import Base from "../../layouts/Base.astro";
+
+const ok = Astro.url.searchParams.get("ok");
+const filas = Astro.url.searchParams.get("filas");
+const error = Astro.url.searchParams.get("error");
+
+const errores: Record<string, string> = {
+  faltan_datos: "Falta el archivo o el año.",
+  archivo_invalido: "No se pudo leer el archivo. ¿Es un .xlsx válido?",
+  hoja_inexistente: "La hoja indicada no existe en el archivo.",
+  sin_filas: "No se encontraron filas de ejecución en esa hoja.",
+};
+
+const db = Astro.locals.runtime.env.DB;
+const historial = await db
+  .prepare("SELECT * FROM importaciones ORDER BY creado_en DESC LIMIT 20")
+  .all<{ id: number; archivo: string; anio: number; filas: number; creado_en: string }>();
+---
+
+<Base title="Cargar datos · Admin" active="">
+  <section class="container" style="padding: 48px 24px;">
+    <a href="/admin" style="font-size:0.85rem;">&larr; Panel</a>
+    <h1 style="font-size:2rem; margin:10px 0 6px;">Cargar registros F17</h1>
+    <p style="color:var(--color-gray-500); max-width:640px;">
+      Subí el archivo .xlsx con el mismo formato de siempre (columnas trim / jurisdicción / programa /
+      categoría programática / fuente / partida / aprobado / vigente / compromiso / devengado). Reemplaza
+      el loop de AppScript: esto actualiza directo la base que usa el Formulario 17 público.
+    </p>
+
+    {ok && <p class="card" style="border-top-color:#1a7f37; color:#1a7f37; max-width:640px;">Importación OK: {filas} filas cargadas.</p>}
+    {error && (
+      <p class="card" style="border-top-color:var(--color-primary); color:var(--color-primary); max-width:640px;">
+        {errores[error] ?? "Error al importar."}
+      </p>
+    )}
+
+    <form method="post" action="/api/admin/importar" enctype="multipart/form-data" class="card" style="border-top-color:var(--color-primary); max-width:520px;">
+      <div class="field">
+        <label for="archivo">Archivo .xlsx</label>
+        <input type="file" id="archivo" name="archivo" accept=".xlsx" required />
+      </div>
+      <div class="field">
+        <label for="anio">Año de la información</label>
+        <input type="number" id="anio" name="anio" required placeholder="2026" min="2000" max="2100" />
+      </div>
+      <div class="field">
+        <label for="hoja">Hoja a importar <span style="font-weight:400; color:var(--color-gray-500);">(opcional, por defecto la primera)</span></label>
+        <input type="text" id="hoja" name="hoja" placeholder="basevig / 2026 / añoant…" />
+      </div>
+      <button class="btn btn-primary" type="submit">Importar</button>
+    </form>
+
+    <h2 style="font-size:1.2rem; margin-top:40px;">Historial de importaciones</h2>
+    <div style="overflow-x:auto; margin-top:14px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Archivo</th>
+            <th>Año</th>
+            <th>Filas</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(historial.results ?? []).map((i) => (
+            <tr>
+              <td>{i.creado_en}</td>
+              <td>{i.archivo}</td>
+              <td>{i.anio}</td>
+              <td>{i.filas}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</Base>

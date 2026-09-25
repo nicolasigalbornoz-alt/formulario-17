@@ -1,0 +1,53 @@
+---
+import Base from "../layouts/Base.astro";
+
+const accesos = [
+  {
+    n: "01",
+    label: "Ejecución presupuestaria",
+    title: "Formulario 17",
+    desc: "Crédito vigente y compromiso por programa, categoría programática, fuente y partida.",
+    href: "/formulario-17",
+  },
+  {
+    n: "02",
+    label: "Guías paso a paso",
+    title: "Instructivos",
+    desc: "Cómo formular, informar trimestres y registrar gastos ejecutados.",
+    href: "/instructivos",
+  },
+  {
+    n: "03",
+    label: "Novedades por mail",
+    title: "Suscribirme",
+    desc: "Recibí avisos y recordatorios de entrega de la Dirección de Presupuesto.",
+    href: "/mailing",
+  },
+];
+---
+
+<Base title="Inicio" active="inicio">
+  <section class="hero">
+    <div class="hero__inner">
+      <span class="eyebrow eyebrow--on-dark">Municipio de Morón</span>
+      <h1>La información,<br />más cerca.</h1>
+      <p>Consultá la ejecución presupuestaria y los instructivos de la Dirección de Presupuesto.</p>
+      <a class="btn btn-primary btn-arrow" href="/formulario-17">Consultar Formulario 17</a>
+    </div>
+  </section>
+
+  <section class="container" style="padding: 56px 24px;">
+    <span class="eyebrow">Accesos directos</span>
+    <h2 style="font-size: 2rem; margin: 8px 0 32px;">¿Qué querés consultar?</h2>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:24px;">
+      {accesos.map((a) => (
+        <a href={a.href} class="card" style="text-decoration:none; display:block;">
+          <div class="card__index">{a.n}</div>
+          <span class="card__label">{a.label}</span>
+          <div class="card__title">{a.title}</div>
+          <p style="color:var(--color-gray-500); font-size:0.9rem; margin-top:10px;">{a.desc}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+</Base>

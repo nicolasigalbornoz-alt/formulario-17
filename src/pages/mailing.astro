@@ -1,0 +1,43 @@
+---
+import Base from "../layouts/Base.astro";
+
+const ok = Astro.url.searchParams.get("ok");
+const baja = Astro.url.searchParams.get("baja");
+const error = Astro.url.searchParams.get("error");
+---
+
+<Base title="Suscribirme" active="mailing">
+  <section class="hero">
+    <div class="hero__inner">
+      <span class="eyebrow eyebrow--on-dark">Dirección de Presupuesto</span>
+      <h1>Suscribite.</h1>
+      <p>Recibí avisos y recordatorios de entrega de presupuesto por mail.</p>
+    </div>
+  </section>
+
+  <section class="container" style="padding: 48px 24px; max-width: 560px;">
+    {ok && <p class="card" style="border-top-color:#1a7f37; color:#1a7f37;">Listo, quedaste suscripto/a. ¡Gracias!</p>}
+    {baja && <p class="card" style="border-top-color:var(--color-gray-500); color:var(--color-gray-700);">Listo, te diste de baja del mailing.</p>}
+    {error && <p class="card" style="border-top-color:var(--color-primary); color:var(--color-primary);">Revisá el email ingresado.</p>}
+
+    <form method="post" action="/api/mailing/subscribe" class="card" style="border-top-color:var(--color-primary);">
+      <div class="field">
+        <label for="nombre">Nombre (opcional)</label>
+        <input type="text" id="nombre" name="nombre" placeholder="Tu nombre" />
+      </div>
+      <div class="field">
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required placeholder="tu@email.com" />
+      </div>
+      <button class="btn btn-primary" type="submit">Suscribirme</button>
+    </form>
+
+    <details style="margin-top:24px; color:var(--color-gray-500); font-size:0.88rem;">
+      <summary style="cursor:pointer; font-weight:600; color:var(--color-gray-700);">¿Querés darte de baja?</summary>
+      <form method="post" action="/api/mailing/unsubscribe" style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+        <input type="email" name="email" required placeholder="tu@email.com" style="flex:1; min-width:200px; padding:10px 12px; border:1px solid var(--color-gray-200); border-radius:var(--radius-sm);" />
+        <button class="btn btn-outline" type="submit" style="background:var(--color-gray-700);">Dar de baja</button>
+      </form>
+    </details>
+  </section>
+</Base>
