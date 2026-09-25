@@ -1,0 +1,26 @@
+---
+import Base from "../../layouts/Base.astro";
+const error = Astro.url.searchParams.get("error");
+---
+
+<Base title="Ingresar · Admin" active="">
+  <section class="container" style="padding: 72px 24px; max-width: 420px;">
+    <span class="eyebrow">Panel administrativo</span>
+    <h1 style="font-size:2rem; margin:8px 0 24px;">Ingresar</h1>
+
+    {error === "1" && <p class="card" style="border-top-color:var(--color-primary); color:var(--color-primary);">Contraseña incorrecta.</p>}
+    {error === "config" && (
+      <p class="card" style="border-top-color:var(--color-primary); color:var(--color-primary);">
+        Faltan configurar los secrets ADMIN_PASSWORD_HASH y SESSION_SECRET en Cloudflare Pages.
+      </p>
+    )}
+
+    <form method="post" action="/api/admin/login" class="card" style="border-top-color:var(--color-primary);">
+      <div class="field">
+        <label for="password">Contraseña</label>
+        <input type="password" id="password" name="password" required autofocus />
+      </div>
+      <button class="btn btn-primary" type="submit">Ingresar</button>
+    </form>
+  </section>
+</Base>

@@ -1,0 +1,32 @@
+---
+import Base from "../../layouts/Base.astro";
+
+const guias = [
+  { slug: "introduccion", n: "01", titulo: "Introducción", desc: "Qué es el Formulario 17 y quiénes lo completan." },
+  { slug: "formulacion", n: "02", titulo: "Formulación", desc: "Cómo armar el presupuesto por programa y partida." },
+  { slug: "informes-trimestrales", n: "03", titulo: "Informes trimestrales", desc: "Cómo reportar lo ejecutado cada trimestre." },
+  { slug: "gastos-ejecutados", n: "04", titulo: "Gastos ejecutados", desc: "Cómo registrar y verificar los gastos ya ejecutados." },
+];
+---
+
+<Base title="Instructivos" active="instructivos">
+  <section class="hero">
+    <div class="hero__inner">
+      <span class="eyebrow eyebrow--on-dark">Dirección de Presupuesto</span>
+      <h1>Instructivos.</h1>
+      <p>Guías paso a paso para formular, informar y ejecutar el presupuesto por área.</p>
+    </div>
+  </section>
+
+  <section class="container" style="padding: 56px 24px;">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:24px;">
+      {guias.map((g) => (
+        <a href={`/instructivos/${g.slug}`} class="card" style="text-decoration:none; display:block;">
+          <div class="card__index">{g.n}</div>
+          <div class="card__title">{g.titulo}</div>
+          <p style="color:var(--color-gray-500); font-size:0.9rem; margin-top:10px;">{g.desc}</p>
+        </a>
+      ))}
+    </div>
+  </section>
+</Base>

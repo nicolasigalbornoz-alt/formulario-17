@@ -1,0 +1,41 @@
+---
+import Base from "../../layouts/Base.astro";
+import { listarSuscriptores } from "../../lib/mailing";
+
+const db = Astro.locals.runtime.env.DB;
+const suscriptores = await listarSuscriptores(db, true);
+---
+
+<Base title="Suscriptos · Admin" active="">
+  <section class="container" style="padding: 48px 24px;">
+    <a href="/admin" style="font-size:0.85rem;">&larr; Panel</a>
+    <div style="display:flex; justify-content:space-between; align-items:flex-end; margin-top:10px;">
+      <div>
+        <span class="eyebrow">Mailing</span>
+        <h1 style="font-size:2rem; margin-top:6px;">Suscriptos ({suscriptores.length})</h1>
+      </div>
+      <a class="btn btn-primary" href="/api/admin/suscriptores.csv" download>Exportar CSV</a>
+    </div>
+
+    <div style="overflow-x:auto; margin-top:28px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Nombre</th>
+            <th>Desde</th>
+          </tr>
+        </thead>
+        <tbody>
+          {suscriptores.map((s) => (
+            <tr>
+              <td>{s.email}</td>
+              <td>{s.nombre ?? "—"}</td>
+              <td>{s.creado_en}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</Base>

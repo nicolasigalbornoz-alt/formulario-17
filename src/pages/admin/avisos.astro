@@ -1,0 +1,62 @@
+---
+import Base from "../../layouts/Base.astro";
+
+const db = Astro.locals.runtime.env.DB;
+const ok = Astro.url.searchParams.get("ok");
+const msg = Astro.url.searchParams.get("msg");
+const error = Astro.url.searchParams.get("error");
+
+const historial = await db
+  .prepare("SELECT * FROM avisos_enviados ORDER BY creado_en DESC LIMIT 20")
+  .all<{ id: number; asunto: string; destinatarios: number; estado: string; detalle: string; creado_en: string }>();
+---
+
+<Base title="Avisos masivos · Admin" active="">
+  <section class="container" style="padding: 48px 24px;">
+    <a href="/admin" style="font-size:0.85rem;">&larr; Panel</a>
+    <h1 style="font-size:2rem; margin:10px 0 24px;">Avisos masivos</h1>
+
+    {ok && (
+      <p class="card" style="border-top-color:#1a7f37; color:#1a7f37;">
+        Aviso guardado. {msg}
+      </p>
+    )}
+    {error && <p class="card" style="border-top-color:var(--color-primary); color:var(--color-primary);">Completá asunto y cuerpo.</p>}
+
+    <form method="post" action="/api/admin/avisos" class="card" style="border-top-color:var(--color-primary); max-width:640px;">
+      <div class="field">
+        <label for="asunto">Asunto</label>
+        <input type="text" id="asunto" name="asunto" required />
+      </div>
+      <div class="field">
+        <label for="cuerpo">Mensaje</label>
+        <textarea id="cuerpo" name="cuerpo" rows="8" required style="font-family:var(--font-body); padding:12px 14px; border:1px solid var(--color-gray-200); border-bottom:2px solid var(--color-primary); border-radius:var(--radius-sm);"></textarea>
+      </div>
+      <button class="btn btn-primary" type="submit">Enviar a suscriptos</button>
+    </form>
+
+    <h2 style="font-size:1.2rem; margin-top:40px;">Historial</h2>
+    <div style="overflow-x:auto; margin-top:14px;">
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Asunto</th>
+            <th>Destinatarios</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(historial.results ?? []).map((a) => (
+            <tr>
+              <td>{a.creado_en}</td>
+              <td>{a.asunto}</td>
+              <td>{a.destinatarios}</td>
+              <td>{a.estado}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</Base>

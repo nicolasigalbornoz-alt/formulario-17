@@ -1,0 +1,187 @@
+---
+import Base from "../layouts/Base.astro";
+import {
+  listJurisdicciones,
+  listProgramas,
+  listCategoriasProgramaticas,
+  listFuentes,
+  getF17Report,
+} from "../lib/f17";
+
+const db = Astro.locals.runtime.env.DB;
+
+const params = Astro.url.searchParams;
+const jurisdiccionCod = params.get("jurisdiccion") || "";
+const programaCod = params.get("programa") || "";
+const catprogCod = params.get("catprog") || "";
+const fuenteCod = params.get("fuente") || "";
+
+const jurisdicciones = await listJurisdicciones(db);
+const programas = jurisdiccionCod ? await listProgramas(db, jurisdiccionCod) : [];
+const categorias = jurisdiccionCod && programaCod ? await listCategoriasProgramaticas(db, jurisdiccionCod, programaCod) : [];
+const fuentes = jurisdiccionCod && programaCod ? await listFuentes(db, jurisdiccionCod, programaCod, catprogCod || null) : [];
+
+const report =
+  jurisdiccionCod && programaCod && fuenteCod
+    ? await getF17Report(db, {
+        jurisdiccionCod,
+        programaCod,
+        fuenteCod,
+        catprogCod: catprogCod || null,
+      })
+    : null;
+
+const fmt = (n: number | null) =>
+  n === null ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const excelHref = report
+  ? `/api/f17/excel?jurisdiccion=${jurisdiccionCod}&programa=${programaCod}&fuente=${fuenteCod}${catprogCod ? `&catprog=${catprogCod}` : ""}`
+  : null;
+---
+
+<Base title="Formulario 17" active="f17">
+  <section class="hero">
+    <div class="hero__inner">
+      <span class="eyebrow eyebrow--on-dark">Ejecución presupuestaria</span>
+      <h1>Formulario 17</h1>
+      <p>
+        Consultá el crédito vigente y lo comprometido por programa, categoría programática, fuente y
+        partida — actualizado al último dato cargado, sin tener que elegir un trimestre.
+      </p>
+    </div>
+  </section>
+
+  <section class="container" style="padding: 40px 24px;">
+    <form method="get" id="filtros" class="card" style="border-top:none; box-shadow:none; border:1px solid var(--color-gray-200); display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:18px; align-items:end;">
+      <div class="field">
+        <label for="jurisdiccion">Jurisdicción</label>
+        <select name="jurisdiccion" id="jurisdiccion" required>
+          <option value="">Elegir…</option>
+          {jurisdicciones.map((j) => (
+            <option value={j.cod} selected={j.cod === jurisdiccionCod}>{j.cod} - {j.denom}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="programa">Programa</label>
+        <select name="programa" id="programa" required disabled={!jurisdiccionCod}>
+          <option value="">Elegir…</option>
+          {programas.map((p) => (
+            <option value={p.cod} selected={p.cod === programaCod}>{p.cod} - {p.denom}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="catprog">Categoría programática <span style="font-weight:400; color:var(--color-gray-500);">(opcional)</span></label>
+        <select name="catprog" id="catprog" disabled={!programaCod}>
+          <option value="">Todas (total del programa)</option>
+          {categorias.map((c) => (
+            <option value={c.cod} selected={c.cod === catprogCod}>{c.cod} - {c.denom}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="fuente">Fuente de financiamiento</label>
+        <select name="fuente" id="fuente" required disabled={!programaCod}>
+          <option value="">Elegir…</option>
+          {fuentes.map((f) => (
+            <option value={f.cod} selected={f.cod === fuenteCod}>{f.cod} - {f.denom}</option>
+          ))}
+        </select>
+      </div>
+
+      <div class="field" style="margin-bottom:0;">
+        <button class="btn btn-primary" type="submit">Ver formulario</button>
+      </div>
+    </form>
+
+    {report && (
+      <div style="margin-top:36px;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px; margin-bottom:18px;">
+          <div>
+            <span class="eyebrow">Año {report.anio} · último trimestre con datos: {report.trimActual || "—"}</span>
+            <h2 style="font-size:1.6rem; margin-top:6px;">
+              {report.jurisdiccion.denom} · {report.programa.denom}
+              {report.catprog && <> · {report.catprog.denom}</>}
+            </h2>
+            <p style="margin:4px 0 0; color:var(--color-gray-500);">Fuente: {report.fuente.cod} - {report.fuente.denom}</p>
+          </div>
+          {excelHref && (
+            <a class="btn btn-primary" href={excelHref} download>Descargar Excel</a>
+          )}
+        </div>
+
+        {report.filas.length === 0 ? (
+          <p style="color:var(--color-gray-500);">No hay partidas con crédito vigente para este filtro.</p>
+        ) : (
+          <div style="overflow-x:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Partida</th>
+                  <th>Denominación</th>
+                  <th>Compromiso año anterior</th>
+                  <th>Igual trim. año anterior</th>
+                  <th>Crédito vigente</th>
+                  <th>Trim. I</th>
+                  <th>Trim. II</th>
+                  <th>Trim. III</th>
+                  <th>Trim. IV</th>
+                  <th>Disponible</th>
+                  <th>Total anual</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.filas.map((f) => (
+                  <tr class={f.excedido ? "excedido" : ""}>
+                    <td>{f.partidaCod}</td>
+                    <td>{f.partidaDenom}</td>
+                    <td>{fmt(f.compromisoAnioAnterior)}</td>
+                    <td>{fmt(f.igualTrimestreAnioAnterior)}</td>
+                    <td>{fmt(f.creditoVigente)}</td>
+                    <td>{fmt(f.trimestres[0])}</td>
+                    <td>{fmt(f.trimestres[1])}</td>
+                    <td>{fmt(f.trimestres[2])}</td>
+                    <td>{fmt(f.trimestres[3])}</td>
+                    <td>{fmt(f.disponible)}</td>
+                    <td>{fmt(f.totalAnual)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        <p style="margin-top:14px; font-size:0.82rem; color:var(--color-gray-500);">
+          Las filas en rojo superan con el total anual comprometido al crédito vigente.
+        </p>
+      </div>
+    )}
+  </section>
+</Base>
+
+<script>
+  // @ts-nocheck -- @cloudflare/workers-types pisa lib.dom acá adentro; es JS de browser normal.
+  // Auto-envía el formulario al cambiar jurisdicción/programa/categoría,
+  // para refrescar las opciones dependientes sin JS extra en el servidor.
+  const form = document.querySelector("#filtros");
+  const jurisdiccion = document.querySelector("#jurisdiccion");
+  const programa = document.querySelector("#programa");
+  const catprog = document.querySelector("#catprog");
+
+  function resetDownstream(...els) {
+    for (const el of els) el.value = "";
+  }
+
+  jurisdiccion?.addEventListener("change", () => {
+    resetDownstream(programa, catprog);
+    form.submit();
+  });
+  programa?.addEventListener("change", () => {
+    resetDownstream(catprog);
+    form.submit();
+  });
+  catprog?.addEventListener("change", () => form.submit());
+</script>

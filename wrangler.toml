@@ -1,0 +1,17 @@
+name = "formulario-17"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "./dist"
+
+# Creá la base con: wrangler d1 create f17_db
+# y reemplazá database_id por el que te devuelva ese comando.
+[[d1_databases]]
+binding = "DB"
+database_name = "f17_db"
+database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+migrations_dir = "migrations"
+
+# Secrets (no van acá, se configuran con `wrangler pages secret put <NOMBRE>`):
+#   ADMIN_PASSWORD_HASH   -> hash sha-256 de la contraseña del panel admin
+#   SESSION_SECRET        -> clave aleatoria para firmar la cookie de sesión
+#   MAIL_PROVIDER_API_KEY -> clave del proveedor de envío de mail (cuando se defina)
