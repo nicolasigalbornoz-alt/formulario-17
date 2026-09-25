@@ -72,9 +72,15 @@ tiene permiso sobre la API de Workers. Por eso el deploy usa
 resto de `dist/` como assets estáticos (ver `wrangler.toml` y
 `public/.assetsignore`), en vez de `wrangler pages deploy`.
 
+Importante: `wrangler deploy` corre por defecto una detección automática de
+framework ("autoconfig") que, para la forma de build que genera
+`@astrojs/cloudflare` (carpeta `_worker.js/` + `_routes.json`), lo confunde
+con un proyecto Pages y pisa el `main`/`[assets]` que ya está bien puesto en
+`wrangler.toml`. Por eso el comando de deploy lleva `--no-autoconfig`.
+
 1. En el dashboard de Cloudflare → tu proyecto → Settings → Builds:
    - **Build command**: `npm run build`
-   - **Deploy command**: `npx wrangler deploy`
+   - **Deploy command**: `npx wrangler deploy --no-autoconfig`
    - **Root directory**: `/`
 2. Crear la base real: `npx wrangler d1 create f17_db`, y pegar el
    `database_id` que te devuelve en `wrangler.toml` (commitear ese cambio).
