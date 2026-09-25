@@ -1,7 +1,21 @@
 name = "formulario-17"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
-pages_build_output_dir = "./dist"
+
+# Deploy nativo de Workers (no Pages): el pipeline de "Workers Builds" de
+# Cloudflare provisiona un token de build que solo tiene permiso sobre la
+# API de Workers, no sobre la de Pages. `dist/_worker.js/index.js` es el
+# mismo formato "export default { fetch }" que usan los Workers, así que
+# se puede desplegar directo con `wrangler deploy` (comando: `npx wrangler
+# deploy`) apuntando `main` a ese archivo y sirviendo el resto de `dist/`
+# como assets estáticos. `public/.assetsignore` excluye `_worker.js` y
+# `_routes.json` (que Astro regenera en cada build) de subirse como si
+# fueran archivos públicos.
+main = "dist/_worker.js/index.js"
+
+[assets]
+directory = "dist"
+binding = "ASSETS"
 
 # Creá la base con: wrangler d1 create f17_db
 # y reemplazá database_id por el que te devuelva ese comando.
@@ -11,7 +25,8 @@ database_name = "f17_db"
 database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
 migrations_dir = "migrations"
 
-# Secrets (no van acá, se configuran con `wrangler pages secret put <NOMBRE>`):
+# Secrets (no van acá, se configuran con `wrangler secret put <NOMBRE>`,
+# o desde Cloudflare dashboard → proyecto → Settings → Environment variables):
 #   ADMIN_PASSWORD_HASH   -> hash sha-256 de la contraseña del panel admin
 #   SESSION_SECRET        -> clave aleatoria para firmar la cookie de sesión
 #   MAIL_PROVIDER_API_KEY -> clave del proveedor de envío de mail (cuando se defina)

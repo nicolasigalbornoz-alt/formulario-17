@@ -9,8 +9,9 @@ datos.
 
 ## Stack
 
-- **[Astro](https://astro.build)** (SSR) + **[Cloudflare Pages](https://pages.cloudflare.com)** — mismo tipo de
-  hosting que ya usa [RAFAMOR](https://rafamor.pages.dev).
+- **[Astro](https://astro.build)** (SSR) + **Cloudflare Workers** (con Workers
+  Static Assets) — mismo tipo de infraestructura que ya usa
+  [RAFAMOR](https://rafamor.pages.dev), desplegado con `wrangler deploy`.
 - **Cloudflare D1** (SQL/SQLite) como base de datos.
 - Sin frameworks de frontend pesados: HTML + CSS + un poco de JS vanilla.
 
@@ -62,18 +63,33 @@ EOF
 npm run dev
 ```
 
-## Desplegar en Cloudflare Pages
+## Desplegar en Cloudflare (Workers Builds)
 
-1. En el dashboard de Cloudflare → Pages → **conectar este repositorio de
-   GitHub**. Build command: `npm run build`. Output directory: `dist`.
+Este repo se conecta como proyecto de **Workers** (no Pages clásico) —
+Cloudflare provisiona un "build token" para el pipeline de git que solo
+tiene permiso sobre la API de Workers. Por eso el deploy usa
+`wrangler deploy` apuntando a `dist/_worker.js/index.js` como Worker y al
+resto de `dist/` como assets estáticos (ver `wrangler.toml` y
+`public/.assetsignore`), en vez de `wrangler pages deploy`.
+
+Importante: `wrangler deploy` corre por defecto una detección automática de
+framework ("autoconfig") que, para la forma de build que genera
+`@astrojs/cloudflare` (carpeta `_worker.js/` + `_routes.json`), lo confunde
+con un proyecto Pages y pisa el `main`/`[assets]` que ya está bien puesto en
+`wrangler.toml`. Por eso el comando de deploy lleva `--no-autoconfig`.
+
+1. En el dashboard de Cloudflare → tu proyecto → Settings → Builds:
+   - **Build command**: `npm run build`
+   - **Deploy command**: `npx wrangler deploy --no-autoconfig`
+   - **Root directory**: `/`
 2. Crear la base real: `npx wrangler d1 create f17_db`, y pegar el
-   `database_id` que te devuelve en `wrangler.toml`.
+   `database_id` que te devuelve en `wrangler.toml` (commitear ese cambio).
 3. Aplicar el esquema en producción: `npm run db:migrate:remote`.
 4. Cargar los datos históricos igual que en local pero con `--remote` en vez
    de `--local` (ver arriba), o usar el panel admin (`/admin/importar`) una
    vez desplegado.
-5. Configurar los secrets del proyecto en Pages → Settings → Environment
-   variables (como secret, no como var):
+5. Configurar los secrets del proyecto en Settings → Environment variables
+   (o `npx wrangler secret put <NOMBRE>` desde tu máquina):
    - `ADMIN_PASSWORD_HASH` — hash sha-256 de la contraseña del panel admin.
    - `SESSION_SECRET` — string random para firmar la cookie de sesión.
    - `MAIL_PROVIDER_API_KEY` — **pendiente**: falta definir si el envío de
@@ -81,8 +97,8 @@ npm run dev
      transaccional externo. Hasta entonces, `/admin/avisos` guarda el aviso
      y la lista de destinatarios pero no envía nada (lo dice explícitamente
      en el panel).
-6. En la base D1 real, vincular el binding `DB` al Pages project (Settings →
-   Functions → D1 database bindings), variable `DB` → `f17_db`.
+6. El binding `DB` → `f17_db` ya queda declarado en `wrangler.toml`
+   (`[[d1_databases]]`), no hace falta configurarlo aparte en el dashboard.
 
 ## Estructura
 
