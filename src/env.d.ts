@@ -4,14 +4,19 @@
 type Runtime = import("@astrojs/cloudflare").Runtime<Env>;
 
 declare namespace App {
-  interface Locals extends Runtime {
-    session?: { admin: true; issuedAt: number };
-  }
+  interface Locals extends Runtime {}
 }
 
 interface Env {
   DB: D1Database;
   ADMIN_PASSWORD_HASH?: string;
   SESSION_SECRET?: string;
-  MAIL_PROVIDER_API_KEY?: string;
+  /** URL pública del sitio, para los enlaces de baja de los mails (si falta se usa la del pedido). */
+  SITE_URL?: string;
+  /** "apps_script" | "resend" (ver src/lib/mail-sender.ts). */
+  MAIL_PROVIDER?: string;
+  MAIL_APPS_SCRIPT_URL?: string;
+  MAIL_TOKEN?: string;
+  RESEND_API_KEY?: string;
+  MAIL_FROM?: string;
 }

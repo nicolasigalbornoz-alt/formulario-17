@@ -16,7 +16,7 @@ export async function sha256Hex(text: string): Promise<string> {
   return toHex(digest);
 }
 
-async function hmacHex(value: string, secret: string): Promise<string> {
+export async function hmacHex(value: string, secret: string): Promise<string> {
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -28,14 +28,22 @@ async function hmacHex(value: string, secret: string): Promise<string> {
   return toHex(sig);
 }
 
+/** Comparación de strings sin cortocircuito (no filtra por tiempos cuántos caracteres coinciden). */
+export function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
 export async function checkPassword(password: string, adminPasswordHash: string): Promise<boolean> {
   const hash = await sha256Hex(password);
-  return hash === adminPasswordHash;
+  return timingSafeEqual(hash, adminPasswordHash.trim().toLowerCase());
 }
 
 export async function createSessionCookieValue(secret: string): Promise<string> {
   const issuedAt = Date.now().toString();
-  const sig = await hmacHex(issuedAt, secret);
+  const sig = await hmacHex(`sesion:${issuedAt}`, secret);
   return `${issuedAt}.${sig}`;
 }
 
@@ -43,9 +51,10 @@ export async function isValidSession(cookieValue: string | undefined, secret: st
   if (!cookieValue) return false;
   const [issuedAt, sig] = cookieValue.split(".");
   if (!issuedAt || !sig) return false;
-  if (Date.now() - Number(issuedAt) > SESSION_MAX_AGE_MS) return false;
-  const expected = await hmacHex(issuedAt, secret);
-  return expected === sig;
+  const edad = Date.now() - Number(issuedAt);
+  if (!(edad >= 0 && edad <= SESSION_MAX_AGE_MS)) return false;
+  const expected = await hmacHex(`sesion:${issuedAt}`, secret);
+  return timingSafeEqual(expected, sig);
 }
 
 export const ADMIN_SESSION_COOKIE = SESSION_COOKIE;

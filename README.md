@@ -1,144 +1,172 @@
-# Formulario 17 — Presupuesto Morón
+# Formulario 17 — Dirección de Presupuesto, Morón
 
 Reemplazo de las páginas de Google Sites de la Dirección de Presupuesto
-(`presupuestomoron/formulario-17/programas` y su equivalente por categoría
-programática). Reemplaza también el loop de AppScript que generaba un Excel
-por combinación y el paso de Looker Studio: ahora todo se sirve desde una
-base SQL propia y el Excel es solo una opción de descarga sobre esos mismos
-datos.
+(`presupuestomoron`), en especial **Formulario 17 → Programas** y
+**Formulario 17 → Categorías programáticas**, que ahora son una sola
+página. También reemplaza lo que había detrás:
 
-## Stack
+| Antes | Ahora |
+|---|---|
+| Planillas "registros f17/programa" y "registros f17/categoría" (hojas `basevig`, `añoant`, `vigente`) cargadas a mano cada trimestre | Base SQL (Cloudflare D1) con la ejecución de gastos de RAFAM, la misma que baja a diario el pipeline de **RAFAMOR** |
+| AppScript que generaba un Excel por programa, fuente y trimestre | El F17 se arma al momento; el Excel es solo una opción de descarga |
+| Tablero de Looker Studio para buscar el archivo | Filtros jurisdicción → programa → categoría (opcional) → fuente |
+| Macro `.xlsm` que sumaba los F17 de cada categoría | Botón «Programa completo»: un Excel con el total del programa y una hoja por categoría, para cada fuente |
+| Formulario de Google "inscripción" | Lista de difusión propia, con panel para exportar CSV y mandar avisos |
 
-- **[Astro](https://astro.build)** (SSR) + **Cloudflare Workers** (con Workers
-  Static Assets) — mismo tipo de infraestructura que ya usa
-  [RAFAMOR](https://rafamor.pages.dev), desplegado con `wrangler deploy`.
-- **Cloudflare D1** (SQL/SQLite) como base de datos.
-- Sin frameworks de frontend pesados: HTML + CSS + un poco de JS vanilla.
+El sitio usa la estética del sistema interno de Gestión Documental del
+Municipio (sde_v2): paleta, tipografías Neo Sans, header, hero, tarjetas y
+login.
 
-## Modelo de datos
+## Qué hay en el sitio
 
-Ver `migrations/0001_init.sql`. Reconstruido a partir de las fórmulas reales
-de las planillas "registros f17" (hojas `basevig` / `añoant` / `vigente` /
-`datos`):
+- **Inicio**: accesos, calendarios de entrega (trimestrales y anuales, los
+  mismos Google Calendar del Sites) y contacto.
+- **Formulario 17** (`/formulario-17`): el F17 prellenado. Los trimestres a
+  programar se pueden completar en pantalla (recalcula Disponible, Total
+  anual y marca en rojo las partidas excedidas, como la plantilla) y se
+  guardan en el navegador. Se descarga en Excel con el formato de la
+  plantilla: fórmulas de Disponible y Total anual y formato condicional
+  incluidos.
+- **Instructivos** (`/instructivos`): PPP, F1, F4/F5, F7, F17 y Ejecutado de
+  gastos, con los PDF de Drive y los videos de YouTube del Sites. Se editan
+  en `src/lib/instructivos.ts`.
+- **Lista de difusión** (`/lista-de-difusion`): alta con los mismos datos que
+  el formulario de Google (nombre, secretaría, cargo, programas, teléfono,
+  mails) y baja.
+- **Panel** (`/admin`, con contraseña): suscriptos (baja/reactivar, CSV),
+  avisos masivos con historial, y estado de los datos de RAFAM con subida
+  manual de un reporte.
 
-- Una fila de `ejecucion` = una partida, en una fuente, un programa (y
-  opcionalmente una categoría programática), una jurisdicción, un año y un
-  trimestre. `trim = 0` es el snapshot inicial del ejercicio; `trim = 1..4`
-  es lo comprometido/devengado en ESE trimestre puntual (no acumulado).
-- **Crédito vigente** = el `vigente` de la fila con el mayor `trim` cargado
-  para ese filtro en el año en curso — es decir, "al último día disponible
-  de información", sin selector de trimestre. Esto es intencionalmente
-  distinto de la planilla vieja, que usaba `trimestre_seleccionado - 1`.
-- **Compromiso** se agrupa sumando por trimestre + partida + fuente +
-  programa (y categoría programática cuando se filtra por una en particular;
-  si no, se suma across todas las categorías del programa).
-- La vista "por programa" y "por categoría programática" son la misma
-  consulta (`src/lib/f17.ts`): la categoría es simplemente un filtro
-  adicional, opcional, anidado dentro de programa.
+## Lógica del F17
 
-La lógica está validada contra los valores reales de las planillas que se
-usaron para reconstruirla (ver commits/PR para el detalle).
+Replica las fórmulas de la hoja `f17` de las planillas "registros f17"
+(`src/lib/f17.ts`), por jurisdicción + programa (+ categoría) + fuente +
+partida:
+
+| Columna | Planilla | Ahora |
+|---|---|---|
+| Trimestre (D5) | se elegía a mano | el del día siguiente al último dato de RAFAM (datos al 24/09 → se programa el III; al 30/09 → el IV) |
+| Partidas | vigente > 0 al cierre del trimestre anterior | vigente > 0 al último dato (o con compromiso en el año: salen en rojo) |
+| Compromiso del año anterior | suma de `añoant` | compromiso de todo el año anterior |
+| Igual trimestre año anterior | `añoant`, trimestre D5 | compromiso del año anterior en el trimestre D5 |
+| **Crédito vigente** | `vigente` al cierre del trimestre anterior | **vigente al último día con información** (pedido de la Dirección) |
+| Trimestres I–IV | compromiso de cada trimestre < D5 | ídem, sumando los meses de cada trimestre |
+| Disponible / Total anual | `G − M` / `SUM(H:K)` | ídem (también como fórmulas en el Excel) |
+| Rojo | `M > G` | ídem |
+
+Sin categoría elegida, el programa es la suma de todas sus categorías.
+
+**Validación** contra las planillas (corte simulado al 31/03/2026, que es
+lo que la planilla usaba para el II trimestre): el crédito vigente coincide
+en el 100% de las partidas (2.245 por programa, 3.044 por categoría). El
+compromiso del I trimestre coincide salvo donde la planilla tenía importes
+guardados como texto (`"0"`, que `SUMIFS` ignora) o compromisos que RAFAM
+registró después de la carga. Además, la hoja `añoant` de la planilla solo
+tenía hasta el III trimestre de 2025, así que su "Compromiso del año
+anterior" quedaba corto (ej. Economía, programa 1, partida 1.1.1.0:
+$464,9 M en la planilla contra $644,4 M del año completo).
+
+## Datos: de RAFAM a la base
+
+La tabla `rafam_gastos` (`migrations/0002_rafam_gastos.sql`) tiene la misma
+forma que la tabla "Gastos" de la base mensual de RAFAMOR: un reporte
+*Estado de Ejecución del Presupuesto de Gastos* por mes, con el crédito
+vigente a la fecha del reporte y el compromiso del mes. Por cada mes queda
+la foto del último reporte (el del mes en curso se reemplaza a diario).
+
+Los reportes se interpretan con `src/lib/rafam-gastos.mjs`, validado contra
+los totales por jurisdicción que imprime el propio RAFAM en los 21 reportes
+mensuales de 2025–2026. Corrige dos problemas del parser de RAFAMOR
+(`generar_base_mensual.py` / `generar_base_diaria.py`), que conviene
+arreglar también allá:
+
+1. Los programas sin actividades (`Apertura Programática:17.00.00 - …`, todo
+   en una celda) no se detectan y su gasto queda sumado a la categoría
+   anterior (ej. el programa 17 de Control Comunal aparece dentro de
+   01.18.00).
+2. "Servicios de la Deuda", "Jefatura de Gabinete" y "Sec. de Mujeres…"
+   quedan sin código de jurisdicción (acá se toma del código RAFAM:
+   `1110109000` → 09).
+
+Hay dos formas de cargar los datos:
+
+- **Automática** (recomendada), en la PC donde corre RAFAMOR:
+  ```bash
+  node scripts/sync-rafamor.mjs --remote
+  ```
+  Busca en `..\Flujos semanales\Flujos semanales\ejecutados_AAAA\gastos_mensual\`
+  (o `--dir=...` / variable `RAFAMOR_DIR`) el reporte más nuevo de cada mes
+  y carga solo los meses que cambiaron. `scripts\sync-rafamor.bat` hace lo
+  mismo con log en `logs\`, para programarlo en el Programador de tareas de
+  Windows después de la corrida diaria de RAFAMOR. Necesita credenciales de
+  Cloudflare: `npx wrangler login` una vez, o la variable
+  `CLOUDFLARE_API_TOKEN` con permiso de edición sobre D1.
+- **Manual**, desde el panel → Datos de RAFAM: subir el `.xls` exportado de
+  RAFAM (del día 1 al último día del mes, o hasta hoy). Se interpreta en el
+  navegador y reemplaza la foto de ese mes.
+
+## Envío de mails
+
+Los avisos masivos se mandan uno por uno (nadie ve los mails de los demás),
+con un enlace de baja al pie. Proveedor según `MAIL_PROVIDER`:
+
+- `apps_script` (sin costo): publicar `scripts/mail_apps_script.gs` como Web
+  App con la cuenta de Presupuesto (instrucciones en el propio archivo) y
+  configurar `MAIL_APPS_SCRIPT_URL` y el secret `MAIL_TOKEN`. Google permite
+  100 destinatarios por día con una cuenta @gmail.com y 1.500 con Workspace.
+- `resend`: `RESEND_API_KEY` y `MAIL_FROM`, con un dominio verificado en
+  Resend.
+
+Sin proveedor, el aviso se guarda como "pendiente" y no se envía nada.
 
 ## Desarrollo local
 
 ```bash
 npm install
-
-# Base local (SQLite emulado por wrangler, no toca Cloudflare)
 npm run db:migrate:local
-
-# Cargar datos de prueba desde un .xlsx con el formato de siempre
-# (trim/jurisdicción/programa/categoría/fuente/partida/aprobado/vigente/compromiso/devengado)
-node scripts/import-xlsx.mjs mi_archivo.xlsx            # auto-detecta hojas con nombre de año (2024/2025/2026)
-node scripts/import-xlsx.mjs mi_archivo.xlsx --sheet=basevig --anio=2026
-npx wrangler d1 execute f17_db --local --file scripts/out/mi_archivo.<hoja>.sql
-
-# Secrets para el panel admin en desarrollo (crear .dev.vars, no se commitea)
-cat > .dev.vars <<'EOF'
-ADMIN_PASSWORD_HASH=<sha256 de tu contraseña>
-SESSION_SECRET=<cualquier string random>
-EOF
-# Para generar el hash: node -e "console.log(require('crypto').createHash('sha256').update('TU_PASSWORD').digest('hex'))"
-
+node scripts/sync-rafamor.mjs              # carga la base local desde RAFAMOR
+cp .dev.vars.example .dev.vars              # y completar ADMIN_PASSWORD_HASH / SESSION_SECRET
 npm run dev
 ```
 
-## Desplegar en Cloudflare (Workers Builds)
+## Deploy (Cloudflare Workers + D1)
 
-Este repo se conecta como proyecto de **Workers** (no Pages clásico) —
-Cloudflare provisiona un "build token" para el pipeline de git que solo
-tiene permiso sobre la API de Workers. Por eso el deploy usa
-`wrangler deploy` apuntando a `dist/_worker.js/index.js` como Worker y al
-resto de `dist/` como assets estáticos (ver `wrangler.toml` y
-`public/.assetsignore`), en vez de `wrangler pages deploy`.
+El repo está conectado como proyecto de **Workers** (Workers Builds):
 
-Importante: `wrangler deploy` corre por defecto una detección automática de
-framework ("autoconfig") que, para la forma de build que genera
-`@astrojs/cloudflare` (carpeta `_worker.js/` + `_routes.json`), lo confunde
-con un proyecto Pages y pisa el `main`/`[assets]` que ya está bien puesto en
-`wrangler.toml`. Por eso el comando de deploy lleva `--no-autoconfig`.
+- Build command: `npm run build`
+- Deploy command: `npx wrangler deploy --no-autoconfig`
 
-Si en algún build viejo esa detección llegó a correr (sin el flag), genera
-un `wrangler.jsonc` en la raíz del proyecto con `pages_build_output_dir` —
-y wrangler siempre prefiere `wrangler.jsonc` por sobre `wrangler.toml` si
-ambos existen. Como el build de Cloudflare cachea archivos entre corridas
-(asociado al repo, no al proyecto — persiste incluso si borrás y recreás el
-proyecto en Cloudflare), ese `wrangler.jsonc` viejo puede seguir aplicándose
-aunque el repo nunca lo haya tenido versionado. El script `prebuild`
-(`package.json`) borra cualquier `wrangler.jsonc`/`wrangler.json` suelto
-antes de cada build, así siempre gana el `wrangler.toml` del repo.
+`wrangler deploy` sin `--no-autoconfig` confunde la salida de Astro con un
+proyecto de Pages y genera un `wrangler.jsonc` que pisa a `wrangler.toml`;
+el script `prebuild` borra cualquier `wrangler.jsonc` suelto por si quedó
+en la caché del build.
 
-1. En el dashboard de Cloudflare → tu proyecto → Settings → Builds:
-   - **Build command**: `npm run build`
-   - **Deploy command**: `npx wrangler deploy --no-autoconfig`
-   - **Root directory**: `/`
-2. Crear la base real: `npx wrangler d1 create f17_db`, y pegar el
-   `database_id` que te devuelve en `wrangler.toml` (commitear ese cambio).
-3. Aplicar el esquema en producción: `npm run db:migrate:remote`.
-4. Cargar los datos históricos igual que en local pero con `--remote` en vez
-   de `--local` (ver arriba), o usar el panel admin (`/admin/importar`) una
-   vez desplegado.
-5. Configurar los secrets del proyecto en Settings → Environment variables
-   (o `npx wrangler secret put <NOMBRE>` desde tu máquina):
-   - `ADMIN_PASSWORD_HASH` — hash sha-256 de la contraseña del panel admin.
-   - `SESSION_SECRET` — string random para firmar la cookie de sesión.
-   - `MAIL_PROVIDER_API_KEY` — **pendiente**: falta definir si el envío de
-     avisos masivos va a usar la cuenta de Gmail institucional o un servicio
-     transaccional externo. Hasta entonces, `/admin/avisos` guarda el aviso
-     y la lista de destinatarios pero no envía nada (lo dice explícitamente
-     en el panel).
-6. El binding `DB` → `f17_db` ya queda declarado en `wrangler.toml`
-   (`[[d1_databases]]`), no hace falta configurarlo aparte en el dashboard.
+Después de cada cambio de esquema: `npm run db:migrate:remote`. Secrets y
+variables: ver el final de `wrangler.toml` (`keep_vars = true` evita que
+el deploy borre las variables cargadas en el dashboard).
 
 ## Estructura
 
 ```
-migrations/0001_init.sql        esquema D1
-scripts/import-xlsx.mjs         importador de línea de comandos (.xlsx -> .sql)
-src/lib/registros.mjs           parseo compartido de las planillas (CLI + panel admin)
-src/lib/f17.ts                  lógica del Formulario 17 (crédito vigente, compromiso, etc.)
-src/lib/auth.ts                 sesión del panel admin
-src/lib/mailing.ts              suscriptores
-src/lib/mail-sender.ts          envío de avisos masivos (enchufable, ver arriba)
-src/pages/formulario-17.astro   página pública del F17 (programa + categoría combinados)
-src/pages/mailing.astro         alta/baja de suscriptos
-src/pages/instructivos/         guías (contenido a cargar por la Dirección)
-src/pages/admin/                panel: suscriptos + CSV, avisos masivos, carga de datos
+migrations/                 esquema D1 (0002 = datos de RAFAM + lista de difusión)
+scripts/sync-rafamor.mjs    RAFAMOR (.xls de RAFAM) -> D1
+scripts/mail_apps_script.gs Web App de Google para mandar los avisos
+src/lib/rafam-gastos.mjs    parser del reporte de gastos de RAFAM (Node, Worker y navegador)
+src/lib/f17.ts              lógica del F17
+src/lib/instructivos.ts     contenido de Instructivos
+src/lib/mailing.ts          lista de difusión
+src/lib/mail-sender.ts      envío de avisos
+src/scripts/                JS del navegador (F17 editable, Excel, subida de reportes)
+src/pages/                  páginas y API
+public/                     logo, foto y tipografías institucionales
 ```
 
-## Pendiente / a definir
+## Pendiente
 
-- **Estética real**: se aplicó una aproximación (paleta roja/azul-negro,
-  tipografía Archivo Black + Inter, patrones de hero/tarjetas) reconstruida
-  a partir de capturas de pantalla del sistema interno de referencia
-  (`sde_v2`), porque ese sistema vive en una IP privada (10.1.1.111) a la
-  que este entorno no tiene acceso de red. Faltan las fotos institucionales
-  reales (se usa un degradé como placeholder) y confirmar la fuente exacta.
-- **Envío de mailing masivo**: falta decidir el proveedor (Gmail
-  institucional vs. servicio transaccional) — ver `src/lib/mail-sender.ts`.
-- **Contenido de instructivos**: la estructura está armada (4 guías) pero el
-  texto/PDF real de cada una lo tiene que cargar la Dirección de Presupuesto.
-- **Ingesta de datos recurrente**: por ahora es manual (subir el .xlsx del
-  export de RAFAM por el panel admin), igual que hoy. Si en algún momento
-  RAFAM/RAFAMOR exponen una API, `src/lib/import-registros.ts` es el punto
-  para automatizarlo.
+- Definir y configurar el proveedor de mail (ver "Envío de mails").
+- Programar `scripts\sync-rafamor.bat` en la PC de RAFAMOR.
+- Pasar los suscriptos actuales del formulario de Google: exportar sus
+  respuestas y cargarlas (o pedirles que se vuelvan a inscribir).
+- Las tipografías Neo Sans son las del sistema de Gestión Documental del
+  Municipio: confirmar que la licencia cubre su uso web.
+- "Recursos Humanos" del Sites estaba vacía y no se migró.

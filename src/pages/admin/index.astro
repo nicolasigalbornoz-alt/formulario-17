@@ -1,41 +1,77 @@
 ---
 import Base from "../../layouts/Base.astro";
+import AdminNav from "../../components/AdminNav.astro";
+import { d1, getCorte, fechaCorta, trimestreAProgramar, TRIMESTRE_ROMANO } from "../../lib/f17";
+import { proveedorConfigurado } from "../../lib/mail-sender";
 
-const db = Astro.locals.runtime.env.DB;
-const [suscriptores, importaciones, ultimoAnio] = await Promise.all([
-  db.prepare("SELECT COUNT(*) as n FROM suscriptores WHERE activo = 1").first<{ n: number }>(),
-  db.prepare("SELECT COUNT(*) as n FROM importaciones").first<{ n: number }>(),
-  db.prepare("SELECT MAX(anio) as anio FROM ejecucion").first<{ anio: number | null }>(),
+const env = Astro.locals.runtime.env;
+const db = env.DB;
+const [corte, suscriptos, ultimoAviso] = await Promise.all([
+  getCorte(d1(db)),
+  db.prepare("SELECT SUM(activo = 1) AS activos, COUNT(*) AS total FROM suscriptores").first<{ activos: number | null; total: number }>(),
+  db.prepare("SELECT asunto, estado, creado_en FROM avisos_enviados ORDER BY id DESC LIMIT 1").first<{ asunto: string; estado: string; creado_en: string }>(),
 ]);
-
-const secciones = [
-  { n: "01", href: "/admin/suscriptores", titulo: "Suscriptos", desc: `${suscriptores?.n ?? 0} activos · exportar CSV` },
-  { n: "02", href: "/admin/avisos", titulo: "Avisos masivos", desc: "Redactar y enviar un aviso a los suscriptos" },
-  { n: "03", href: "/admin/importar", titulo: "Cargar datos", desc: `Subir registros F17 (.xlsx) · ${importaciones?.n ?? 0} importaciones` },
-];
+const T = corte ? trimestreAProgramar(corte) : null;
+const proveedor = proveedorConfigurado(env);
 ---
 
-<Base title="Panel administrativo" active="">
-  <section class="container" style="padding: 48px 24px;">
-    <div style="display:flex; justify-content:space-between; align-items:center;">
-      <div>
-        <span class="eyebrow">Dirección de Presupuesto</span>
-        <h1 style="font-size:2rem; margin-top:6px;">Panel administrativo</h1>
-        <p style="color:var(--color-gray-500);">Año de datos vigente: {ultimoAnio?.anio ?? "—"}</p>
-      </div>
-      <form method="post" action="/api/admin/logout">
-        <button class="btn btn-outline" type="submit" style="background:var(--color-gray-700);">Salir</button>
-      </form>
-    </div>
+<Base title="Panel administrativo">
+  <AdminNav active="inicio" />
 
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:24px; margin-top:32px;">
-      {secciones.map((s) => (
-        <a href={s.href} class="card" style="text-decoration:none; display:block;">
-          <div class="card__index">{s.n}</div>
-          <div class="card__title">{s.titulo}</div>
-          <p style="color:var(--color-gray-500); font-size:0.9rem; margin-top:10px;">{s.desc}</p>
-        </a>
-      ))}
-    </div>
-  </section>
+  <div class="card">
+    <dl class="dl-grid">
+      <div>
+        <dt>Datos de RAFAM al</dt>
+        <dd>
+          {corte ? fechaCorta(corte.hasta) : "Sin datos"}
+          <small>{corte ? `${corte.mesesCargados.length} mes(es) de ${corte.anio} cargados` : "Cargá un reporte en «Datos de RAFAM»"}</small>
+        </dd>
+      </div>
+      <div>
+        <dt>F17 que se está programando</dt>
+        <dd>
+          {corte ? (T ? `${TRIMESTRE_ROMANO[T - 1]} trimestre ${corte.anio}` : `Ejercicio ${corte.anio} cerrado`) : "—"}
+          <small>Trimestre del día siguiente al último dato</small>
+        </dd>
+      </div>
+      <div>
+        <dt>Suscriptos activos</dt>
+        <dd>
+          {suscriptos?.activos ?? 0}
+          <small>{suscriptos?.total ?? 0} inscripciones en total</small>
+        </dd>
+      </div>
+      <div>
+        <dt>Envío de mails</dt>
+        <dd>
+          {proveedor ?? "Sin configurar"}
+          <small>{ultimoAviso ? `Último aviso: «${ultimoAviso.asunto}» (${ultimoAviso.estado})` : "Todavía no se mandaron avisos"}</small>
+        </dd>
+      </div>
+    </dl>
+  </div>
+
+  <div class="service-grid">
+    <a class="service-card" href="/admin/suscriptores">
+      <div class="service-card-top"><span class="service-number">01</span><span class="service-arrow" aria-hidden="true">↗</span></div>
+      <span class="eyebrow">Lista de difusión</span>
+      <h3 style="font-size:28px;">Suscriptos</h3>
+      <p>Ver quién está inscripto, dar de baja o reactivar y descargar la lista en CSV.</p>
+      <span class="service-cta">Ingresar <span aria-hidden="true">→</span></span>
+    </a>
+    <a class="service-card" href="/admin/avisos">
+      <div class="service-card-top"><span class="service-number">02</span><span class="service-arrow" aria-hidden="true">↗</span></div>
+      <span class="eyebrow">Comunicación</span>
+      <h3 style="font-size:28px;">Avisos masivos</h3>
+      <p>Redactar un aviso o recordatorio de vencimiento y mandarlo a todos los suscriptos.</p>
+      <span class="service-cta">Ingresar <span aria-hidden="true">→</span></span>
+    </a>
+    <a class="service-card" href="/admin/datos">
+      <div class="service-card-top"><span class="service-number">03</span><span class="service-arrow" aria-hidden="true">↗</span></div>
+      <span class="eyebrow">Formulario 17</span>
+      <h3 style="font-size:28px;">Datos de RAFAM</h3>
+      <p>Qué meses están cargados y subir a mano un reporte de ejecución de gastos de RAFAM.</p>
+      <span class="service-cta">Ingresar <span aria-hidden="true">→</span></span>
+    </a>
+  </div>
 </Base>

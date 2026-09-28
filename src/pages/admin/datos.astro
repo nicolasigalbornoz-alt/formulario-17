@@ -1,0 +1,103 @@
+---
+import Base from "../../layouts/Base.astro";
+import AdminNav from "../../components/AdminNav.astro";
+import { fechaCorta } from "../../lib/f17";
+
+const db = Astro.locals.runtime.env.DB;
+const cortes = await db
+  .prepare("SELECT anio, mes, desde, hasta, mes_completo, filas, archivo, origen, cargado_en FROM rafam_cortes ORDER BY anio DESC, mes DESC")
+  .all<{ anio: number; mes: number; desde: string; hasta: string; mes_completo: number; filas: number; archivo: string | null; origen: string; cargado_en: string }>();
+const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const q = Astro.url.searchParams;
+---
+
+<Base title="Datos de RAFAM · Panel">
+  <AdminNav active="datos" />
+
+  {q.get("ok") && <div class="alert alert-success">{q.get("msg")}</div>}
+
+  <div class="instructivo-layout">
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">Meses cargados</h2>
+          <p class="card-intro">
+            Por cada mes queda la foto del último reporte de RAFAM cargado. El F17 toma el crédito vigente de la foto más nueva y
+            suma el compromiso de cada trimestre.
+          </p>
+        </div>
+      </div>
+      {
+        cortes.results.length === 0 ? (
+          <p class="empty-state">Todavía no hay datos cargados.</p>
+        ) : (
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Mes</th>
+                  <th>Período del reporte</th>
+                  <th>Filas</th>
+                  <th>Archivo</th>
+                  <th>Cargado (UTC)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cortes.results.map((c) => (
+                  <tr>
+                    <td>
+                      <strong>
+                        {MESES[c.mes - 1]} {c.anio}
+                      </strong>{" "}
+                      {!c.mes_completo && <span class="badge badge-warning">parcial</span>}
+                    </td>
+                    <td>
+                      {fechaCorta(c.desde)} al {fechaCorta(c.hasta)}
+                    </td>
+                    <td class="num">{c.filas.toLocaleString("es-AR")}</td>
+                    <td style="font-size:12px; color:#666;">
+                      {c.archivo}
+                      <br />
+                      <span class="badge badge-muted">{c.origen === "panel" ? "subido en el panel" : "sincronizado desde RAFAMOR"}</span>
+                    </td>
+                    <td style="white-space:nowrap; font-size:13px;">{c.cargado_en.slice(0, 16).replace("T", " ")}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      }
+    </div>
+
+    <aside>
+      <form class="card" id="subir-reporte">
+        <span class="eyebrow">Carga manual</span>
+        <h2 class="card-title" style="margin:8px 0 8px;">Subir un reporte de RAFAM</h2>
+        <p class="card-intro" style="margin-bottom:16px;">
+          En RAFAM: <em>Estado de Ejecución del Presupuesto de Gastos</em>, del día 1 al último día del mes (o hasta hoy si es el
+          mes en curso), todas las partidas, exportado a Excel (.xls). Reemplaza la foto de ese mes.
+        </p>
+        <label class="form-group">Archivo
+          <input class="form-control" type="file" name="archivo" accept=".xls,.xlsx" required />
+        </label>
+        <div id="vista-previa" class="alert alert-warning" hidden></div>
+        <div class="form-actions" style="justify-content:flex-start;">
+          <button class="btn btn-primary" type="submit" disabled>Cargar</button>
+        </div>
+      </form>
+      <div class="card">
+        <span class="eyebrow">Carga automática</span>
+        <p class="card-intro">
+          El pipeline de RAFAMOR baja estos reportes todos los días. Para pasarlos a la base del sitio, en la PC donde corre
+          RAFAMOR: <code>node scripts/sync-rafamor.mjs --remote</code> (ver README).
+        </p>
+      </div>
+    </aside>
+  </div>
+</Base>
+
+<script>
+  import { iniciarSubidaRafam } from "../../scripts/admin-datos";
+  iniciarSubidaRafam();
+</script>

@@ -1,0 +1,23 @@
+---
+import Base from "../../layouts/Base.astro";
+
+// Enlace de baja de los mails. Se confirma con un botón (POST) para que los
+// antivirus/previsualizadores que abren los enlaces no den de baja a nadie.
+const email = Astro.url.searchParams.get("e") ?? "";
+---
+
+<Base title="Darme de baja" active="mailing">
+  <div class="page-heading">
+    <div>
+      <span class="eyebrow">Lista de difusión</span>
+      <h1>Darme de baja</h1>
+    </div>
+  </div>
+  <form class="card" method="post" action="/api/mailing/unsubscribe" style="max-width:560px;">
+    <p class="card-intro" style="margin-bottom:18px;">
+      Vas a dejar de recibir los avisos de la Dirección de Presupuesto en <strong>{email || "tu mail"}</strong>.
+    </p>
+    <input type="hidden" name="email" value={email} />
+    <button class="btn btn-primary" type="submit">Confirmar la baja</button>
+  </form>
+</Base>

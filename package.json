@@ -11,11 +11,13 @@
     "astro": "astro",
     "db:migrate:local": "wrangler d1 migrations apply f17_db --local",
     "db:migrate:remote": "wrangler d1 migrations apply f17_db --remote",
-    "import:xlsx": "node scripts/import-xlsx.mjs"
+    "sync:rafamor": "node scripts/sync-rafamor.mjs",
+    "sync:rafamor:remote": "node scripts/sync-rafamor.mjs --remote"
   },
   "dependencies": {
     "@astrojs/cloudflare": "^11.1.0",
     "astro": "^4.16.0",
+    "exceljs": "^4.4.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

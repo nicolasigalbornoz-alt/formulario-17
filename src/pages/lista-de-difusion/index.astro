@@ -1,0 +1,92 @@
+---
+import Base from "../../layouts/Base.astro";
+import { CARGOS } from "../../lib/mailing";
+
+const q = Astro.url.searchParams;
+const ok = q.get("ok");
+const baja = q.get("baja");
+const error = q.get("error");
+---
+
+<Base title="Lista de difusión" active="mailing" description="Inscribite para recibir información de Presupuesto y recordatorios de entrega de formularios.">
+  <div class="page-heading">
+    <div>
+      <span class="eyebrow">Novedades y vencimientos</span>
+      <h1>Lista de difusión</h1>
+      <p>
+        Inscribite para recibir información sobre Presupuesto y recordatorios sobre las fechas de entrega de formularios.
+      </p>
+    </div>
+    <span class="page-heading-mark" aria-hidden="true">03</span>
+  </div>
+
+  {ok && <div class="alert alert-success">¡Listo! Quedaste inscripto/a en la lista de difusión de la Dirección de Presupuesto.</div>}
+  {baja === "1" && <div class="alert alert-success">Te dimos de baja: no vas a recibir más avisos.</div>}
+  {baja === "0" && <div class="alert alert-warning">Ese mail no figuraba como inscripto (o ya estaba dado de baja).</div>}
+  {error && <div class="alert alert-error">{error}</div>}
+
+  <div class="instructivo-layout">
+    <form class="card" method="post" action="/api/mailing/subscribe">
+      <div class="card-header">
+        <h2 class="card-title">Inscripción</h2>
+        <small style="color:#777;">* obligatorio</small>
+      </div>
+      <!-- Trampa para bots: los humanos no ven este campo. -->
+      <div style="position:absolute; left:-9999px;" aria-hidden="true">
+        <label>No completar <input type="text" name="sitio_web" tabindex="-1" autocomplete="off" /></label>
+      </div>
+      <div class="form-row">
+        <label class="form-group">Nombre completo *
+          <input class="form-control" name="nombre" required maxlength="120" autocomplete="name" />
+        </label>
+        <label class="form-group">Secretaría *
+          <input class="form-control" name="secretaria" required maxlength="160" />
+        </label>
+      </div>
+      <div class="form-row">
+        <label class="form-group">Cargo *
+          <select class="form-control" name="cargo" required>
+            <option value="">Elegí…</option>
+            {CARGOS.map((c) => <option>{c}</option>)}
+          </select>
+        </label>
+        <label class="form-group">Teléfono celular
+          <input class="form-control" name="telefono" maxlength="40" inputmode="tel" autocomplete="tel" />
+        </label>
+      </div>
+      <label class="form-group">Programa(s) o categoría(s) programática(s) por las que respondés *
+        <input class="form-control" name="programas" required maxlength="300" placeholder="Ej: 22.01.00, 22.09.00" />
+      </label>
+      <div class="form-row">
+        <label class="form-group">Mail institucional (del cargo y/o área) *
+          <input class="form-control" type="email" name="email" required maxlength="254" autocomplete="email" />
+        </label>
+        <label class="form-group">Mail alternativo
+          <input class="form-control" type="email" name="email_alternativo" maxlength="254" />
+        </label>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Inscribirme <span aria-hidden="true">→</span></button>
+      </div>
+    </form>
+
+    <aside>
+      <form class="card" method="post" action="/api/mailing/unsubscribe">
+        <span class="eyebrow">Baja</span>
+        <h2 class="card-title" style="margin:8px 0 6px;">¿Ya no querés recibir avisos?</h2>
+        <p class="card-intro" style="margin-bottom:14px;">Ingresá el mail institucional con el que te inscribiste.</p>
+        <label class="form-group">Mail
+          <input class="form-control" type="email" name="email" required maxlength="254" />
+        </label>
+        <button class="btn btn-secondary" type="submit" style="width:100%;">Darme de baja</button>
+      </form>
+      <div class="card">
+        <span class="eyebrow">Tus datos</span>
+        <p class="card-intro">
+          Los datos se usan solo para enviarte avisos de la Dirección de Presupuesto. Cada mail trae un enlace para darte de
+          baja.
+        </p>
+      </div>
+    </aside>
+  </div>
+</Base>

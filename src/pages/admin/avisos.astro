@@ -1,62 +1,123 @@
 ---
 import Base from "../../layouts/Base.astro";
+import AdminNav from "../../components/AdminNav.astro";
+import { proveedorConfigurado } from "../../lib/mail-sender";
 
-const db = Astro.locals.runtime.env.DB;
-const ok = Astro.url.searchParams.get("ok");
-const msg = Astro.url.searchParams.get("msg");
-const error = Astro.url.searchParams.get("error");
-
-const historial = await db
-  .prepare("SELECT * FROM avisos_enviados ORDER BY creado_en DESC LIMIT 20")
-  .all<{ id: number; asunto: string; destinatarios: number; estado: string; detalle: string; creado_en: string }>();
+const env = Astro.locals.runtime.env;
+const db = env.DB;
+const q = Astro.url.searchParams;
+const [activos, historial] = await Promise.all([
+  db.prepare("SELECT COUNT(*) AS n FROM suscriptores WHERE activo = 1").first<{ n: number }>(),
+  db
+    .prepare("SELECT id, asunto, destinatarios, enviados, estado, detalle, creado_en FROM avisos_enviados ORDER BY id DESC LIMIT 30")
+    .all<{ id: number; asunto: string; destinatarios: number; enviados: number; estado: string; detalle: string | null; creado_en: string }>(),
+]);
+const proveedor = proveedorConfigurado(env);
+const fecha = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s.slice(11, 16)}`;
+const badge = (estado: string) => (estado === "enviado" ? "badge-success" : estado === "parcial" ? "badge-warning" : "badge-muted");
 ---
 
-<Base title="Avisos masivos · Admin" active="">
-  <section class="container" style="padding: 48px 24px;">
-    <a href="/admin" style="font-size:0.85rem;">&larr; Panel</a>
-    <h1 style="font-size:2rem; margin:10px 0 24px;">Avisos masivos</h1>
+<Base title="Avisos masivos · Panel">
+  <AdminNav active="avisos" />
 
-    {ok && (
-      <p class="card" style="border-top-color:#1a7f37; color:#1a7f37;">
-        Aviso guardado. {msg}
-      </p>
-    )}
-    {error && <p class="card" style="border-top-color:var(--color-primary); color:var(--color-primary);">Completá asunto y cuerpo.</p>}
+  {q.get("ok") && <div class:list={["alert", q.get("estado") === "enviado" ? "alert-success" : "alert-warning"]}>{q.get("msg")}</div>}
+  {q.get("error") && <div class="alert alert-error">Completá el asunto y el texto del aviso.</div>}
+  {
+    !proveedor && (
+      <div class="alert alert-warning">
+        Todavía no hay un proveedor de mail configurado: los avisos se guardan pero no se envían. Ver «Envío de mails» en el
+        README (Apps Script con la cuenta de Presupuesto, o Resend).
+      </div>
+    )
+  }
 
-    <form method="post" action="/api/admin/avisos" class="card" style="border-top-color:var(--color-primary); max-width:640px;">
-      <div class="field">
-        <label for="asunto">Asunto</label>
-        <input type="text" id="asunto" name="asunto" required />
+  <div class="instructivo-layout">
+    <form class="card" method="post" action="/api/admin/avisos" id="form-aviso">
+      <div class="card-header">
+        <div>
+          <h2 class="card-title">Nuevo aviso</h2>
+          <p class="card-intro">Se manda a los <strong>{activos?.n ?? 0}</strong> suscriptos activos, uno por uno (nadie ve los mails de los demás).</p>
+        </div>
       </div>
-      <div class="field">
-        <label for="cuerpo">Mensaje</label>
-        <textarea id="cuerpo" name="cuerpo" rows="8" required style="font-family:var(--font-body); padding:12px 14px; border:1px solid var(--color-gray-200); border-bottom:2px solid var(--color-primary); border-radius:var(--radius-sm);"></textarea>
+      <label class="form-group">Asunto
+        <input class="form-control" name="asunto" required maxlength="160" placeholder="Ej: Recordatorio: vence la presentación del F17 del IV trimestre" />
+      </label>
+      <label class="form-group">Texto
+        <textarea class="form-control" name="cuerpo" required maxlength="10000" placeholder="Escribí el aviso. Dejá una línea en blanco entre párrafos. Los enlaces (https://...) quedan clickeables."></textarea>
+        <small>Al pie de cada mail se agregan los datos de contacto de la Dirección y un enlace para darse de baja.</small>
+      </label>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit" disabled={!activos?.n}>
+          {proveedor ? `Enviar a ${activos?.n ?? 0} suscriptos` : "Guardar aviso (sin envío)"} <span aria-hidden="true">→</span>
+        </button>
       </div>
-      <button class="btn btn-primary" type="submit">Enviar a suscriptos</button>
     </form>
 
-    <h2 style="font-size:1.2rem; margin-top:40px;">Historial</h2>
-    <div style="overflow-x:auto; margin-top:14px;">
-      <table>
-        <thead>
-          <tr>
-            <th>Fecha</th>
-            <th>Asunto</th>
-            <th>Destinatarios</th>
-            <th>Estado</th>
-          </tr>
-        </thead>
-        <tbody>
-          {(historial.results ?? []).map((a) => (
-            <tr>
-              <td>{a.creado_en}</td>
-              <td>{a.asunto}</td>
-              <td>{a.destinatarios}</td>
-              <td>{a.estado}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <aside class="card">
+      <span class="eyebrow">Envío</span>
+      <h2 class="card-title" style="margin:8px 0 10px;">{proveedor ?? "Sin configurar"}</h2>
+      <p class="card-intro">
+        {
+          proveedor === "Google Apps Script"
+            ? "Sale desde la cuenta de Google que publicó el script. Google permite 100 destinatarios por día con una cuenta @gmail.com y 1.500 con Workspace."
+            : proveedor === "Resend"
+              ? "Sale desde la dirección configurada en MAIL_FROM."
+              : "Configurá MAIL_PROVIDER y sus credenciales en Cloudflare para que los avisos se envíen."
+        }
+      </p>
+    </aside>
+  </div>
+
+  <div class="card">
+    <div class="card-header">
+      <h2 class="card-title">Historial</h2>
     </div>
-  </section>
+    {
+      historial.results.length === 0 ? (
+        <p class="empty-state">Todavía no se mandó ningún aviso.</p>
+      ) : (
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Fecha (UTC)</th>
+                <th>Asunto</th>
+                <th>Enviados</th>
+                <th>Estado</th>
+                <th>Detalle</th>
+              </tr>
+            </thead>
+            <tbody>
+              {historial.results.map((a) => (
+                <tr>
+                  <td style="white-space:nowrap;">{fecha(a.creado_en)}</td>
+                  <td>{a.asunto}</td>
+                  <td class="num">
+                    {a.enviados} / {a.destinatarios}
+                  </td>
+                  <td>
+                    <span class:list={["badge", badge(a.estado)]}>{a.estado}</span>
+                  </td>
+                  <td style="color:#666; font-size:13px;">{a.detalle}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+  </div>
 </Base>
+
+<script>
+  const form = document.querySelector<HTMLFormElement>("#form-aviso");
+  form?.addEventListener("submit", (e) => {
+    const boton = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
+    if (!confirm(`${boton.textContent?.replace("→", "").trim()}: ¿confirmás?`)) {
+      e.preventDefault();
+      return;
+    }
+    boton.disabled = true;
+    boton.textContent = "Enviando…";
+  });
+</script>

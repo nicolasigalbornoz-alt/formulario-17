@@ -1,187 +1,321 @@
 ---
 import Base from "../layouts/Base.astro";
 import {
+  d1,
+  getCorte,
   listJurisdicciones,
   listProgramas,
-  listCategoriasProgramaticas,
+  listCategorias,
   listFuentes,
-  getF17Report,
+  getDatosPrograma,
+  armarF17,
+  fechaCorta,
+  trimestreAProgramar,
+  trimestreDeMes,
+  TRIMESTRE_ROMANO,
+  type CodDenom,
+  type F17Reporte,
 } from "../lib/f17";
 
-const db = Astro.locals.runtime.env.DB;
-
+const sql = d1(Astro.locals.runtime.env.DB);
 const params = Astro.url.searchParams;
-const jurisdiccionCod = params.get("jurisdiccion") || "";
-const programaCod = params.get("programa") || "";
-const catprogCod = params.get("catprog") || "";
-const fuenteCod = params.get("fuente") || "";
+const jurisdiccion = params.get("jurisdiccion") || "";
+const programa = params.get("programa") || "";
+const catprog = params.get("catprog") || "";
+let fuente = params.get("fuente") || "";
 
-const jurisdicciones = await listJurisdicciones(db);
-const programas = jurisdiccionCod ? await listProgramas(db, jurisdiccionCod) : [];
-const categorias = jurisdiccionCod && programaCod ? await listCategoriasProgramaticas(db, jurisdiccionCod, programaCod) : [];
-const fuentes = jurisdiccionCod && programaCod ? await listFuentes(db, jurisdiccionCod, programaCod, catprogCod || null) : [];
+const corte = await getCorte(sql);
 
-const report =
-  jurisdiccionCod && programaCod && fuenteCod
-    ? await getF17Report(db, {
-        jurisdiccionCod,
-        programaCod,
-        fuenteCod,
-        catprogCod: catprogCod || null,
-      })
-    : null;
+let jurisdicciones: CodDenom[] = [];
+let programas: CodDenom[] = [];
+let categorias: CodDenom[] = [];
+let fuentes: CodDenom[] = [];
+let reporte: F17Reporte | null = null;
 
+if (corte) {
+  jurisdicciones = await listJurisdicciones(sql, corte);
+  if (jurisdiccion) programas = await listProgramas(sql, corte, jurisdiccion);
+  if (jurisdiccion && programa) {
+    [categorias, fuentes] = await Promise.all([
+      listCategorias(sql, corte, jurisdiccion, programa),
+      listFuentes(sql, corte, jurisdiccion, programa, catprog || null),
+    ]);
+    // Casi todos los programas tienen una sola fuente: se elige sola.
+    if (!fuente && fuentes.length === 1) fuente = fuentes[0].cod;
+    if (fuente && !fuentes.some((f) => f.cod === fuente)) fuente = "";
+  }
+  if (jurisdiccion && programa && fuente) {
+    const datos = await getDatosPrograma(sql, corte, jurisdiccion, programa);
+    reporte = datos ? armarF17(datos, fuente, catprog || null) : null;
+  }
+}
+
+const T = corte ? trimestreAProgramar(corte) : null;
+const hayEnCurso = Boolean(corte && T && trimestreDeMes(corte.mes) === T);
+const pad2 = (n: number) => String(n).padStart(2, "0");
 const fmt = (n: number | null) =>
-  n === null ? "—" : n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  n === null ? "" : n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-const excelHref = report
-  ? `/api/f17/excel?jurisdiccion=${jurisdiccionCod}&programa=${programaCod}&fuente=${fuenteCod}${catprogCod ? `&catprog=${catprogCod}` : ""}`
-  : null;
+// Lo que necesita el script del navegador para recalcular y armar el Excel.
+const payload = reporte ? JSON.stringify(reporte) : "null";
 ---
 
-<Base title="Formulario 17" active="f17">
-  <section class="hero">
-    <div class="hero__inner">
-      <span class="eyebrow eyebrow--on-dark">Ejecución presupuestaria</span>
+<Base title="Formulario 17" active="f17" description="Formulario 17 prellenado: programación financiera del compromiso por programa y categoría programática.">
+  <div class="page-heading">
+    <div>
+      <span class="eyebrow">Programación financiera del compromiso</span>
       <h1>Formulario 17</h1>
       <p>
-        Consultá el crédito vigente y lo comprometido por programa, categoría programática, fuente y
-        partida — actualizado al último dato cargado, sin tener que elegir un trimestre.
+        Elegí el programa (y, si querés, una categoría programática) para ver el F17 prellenado: las partidas con crédito
+        vigente, el compromiso del año anterior y lo comprometido en los trimestres ya ejecutados. Completá los trimestres a
+        programar y descargalo en Excel.
       </p>
     </div>
-  </section>
+    <span class="page-heading-mark" aria-hidden="true">17</span>
+  </div>
 
-  <section class="container" style="padding: 40px 24px;">
-    <form method="get" id="filtros" class="card" style="border-top:none; box-shadow:none; border:1px solid var(--color-gray-200); display:grid; grid-template-columns:repeat(auto-fit, minmax(220px,1fr)); gap:18px; align-items:end;">
-      <div class="field">
-        <label for="jurisdiccion">Jurisdicción</label>
-        <select name="jurisdiccion" id="jurisdiccion" required>
-          <option value="">Elegir…</option>
-          {jurisdicciones.map((j) => (
-            <option value={j.cod} selected={j.cod === jurisdiccionCod}>{j.cod} - {j.denom}</option>
-          ))}
-        </select>
+  {
+    !corte && (
+      <div class="alert alert-warning">
+        Todavía no hay datos de ejecución cargados. La Dirección de Presupuesto los actualiza desde RAFAM; volvé a intentar
+        más tarde.
       </div>
+    )
+  }
 
-      <div class="field">
-        <label for="programa">Programa</label>
-        <select name="programa" id="programa" required disabled={!jurisdiccionCod}>
-          <option value="">Elegir…</option>
-          {programas.map((p) => (
-            <option value={p.cod} selected={p.cod === programaCod}>{p.cod} - {p.denom}</option>
-          ))}
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="catprog">Categoría programática <span style="font-weight:400; color:var(--color-gray-500);">(opcional)</span></label>
-        <select name="catprog" id="catprog" disabled={!programaCod}>
-          <option value="">Todas (total del programa)</option>
-          {categorias.map((c) => (
-            <option value={c.cod} selected={c.cod === catprogCod}>{c.cod} - {c.denom}</option>
-          ))}
-        </select>
-      </div>
-
-      <div class="field">
-        <label for="fuente">Fuente de financiamiento</label>
-        <select name="fuente" id="fuente" required disabled={!programaCod}>
-          <option value="">Elegir…</option>
-          {fuentes.map((f) => (
-            <option value={f.cod} selected={f.cod === fuenteCod}>{f.cod} - {f.denom}</option>
-          ))}
-        </select>
-      </div>
-
-      <div class="field" style="margin-bottom:0;">
-        <button class="btn btn-primary" type="submit">Ver formulario</button>
-      </div>
-    </form>
-
-    {report && (
-      <div style="margin-top:36px;">
-        <div style="display:flex; justify-content:space-between; align-items:flex-end; flex-wrap:wrap; gap:12px; margin-bottom:18px;">
+  {
+    corte && (
+      <div class="card no-print">
+        <div class="card-header">
           <div>
-            <span class="eyebrow">Año {report.anio} · último trimestre con datos: {report.trimActual || "—"}</span>
-            <h2 style="font-size:1.6rem; margin-top:6px;">
-              {report.jurisdiccion.denom} · {report.programa.denom}
-              {report.catprog && <> · {report.catprog.denom}</>}
-            </h2>
-            <p style="margin:4px 0 0; color:var(--color-gray-500);">Fuente: {report.fuente.cod} - {report.fuente.denom}</p>
+            <h2 class="card-title">Elegí el formulario</h2>
+            <p class="card-intro">
+              Datos de RAFAM al <strong>{fechaCorta(corte.hasta)}</strong> ·{" "}
+              {T ? <>se programa el <strong>{TRIMESTRE_ROMANO[T - 1]} trimestre</strong> de {corte.anio}</> : <>ejercicio {corte.anio} cerrado</>}
+            </p>
           </div>
-          {excelHref && (
-            <a class="btn btn-primary" href={excelHref} download>Descargar Excel</a>
-          )}
+        </div>
+        <form method="get" id="filtros" class="search-bar">
+          <label class="filter-field">
+            <span>Jurisdicción</span>
+            <select class="form-control" name="jurisdiccion" id="jurisdiccion" required>
+              <option value="">Elegir…</option>
+              {jurisdicciones.map((j) => (
+                <option value={j.cod} selected={j.cod === jurisdiccion}>
+                  {j.cod} - {j.denom}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label class="filter-field">
+            <span>Programa</span>
+            <select class="form-control" name="programa" id="programa" required disabled={!jurisdiccion}>
+              <option value="">Elegir…</option>
+              {programas.map((p) => (
+                <option value={p.cod} selected={p.cod === programa}>
+                  {p.cod} - {p.denom}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label class="filter-field">
+            <span>
+              Categoría programática <small>(opcional)</small>
+            </span>
+            <select class="form-control" name="catprog" id="catprog" disabled={!programa}>
+              <option value="">Todas · total del programa</option>
+              {categorias.map((c) => (
+                <option value={c.cod} selected={c.cod === catprog}>
+                  {c.cod} - {c.denom}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label class="filter-field">
+            <span>Fuente de financiamiento</span>
+            <select class="form-control" name="fuente" id="fuente" required disabled={!programa}>
+              <option value="">Elegir…</option>
+              {fuentes.map((f) => (
+                <option value={f.cod} selected={f.cod === fuente}>
+                  {f.cod} - {f.denom}
+                </option>
+              ))}
+            </select>
+          </label>
+          <div class="search-actions">
+            <button class="btn btn-primary" type="submit">
+              Ver formulario <span aria-hidden="true">→</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    )
+  }
+
+  {
+    corte && jurisdiccion && programa && fuente && !reporte && (
+      <div class="alert alert-warning">No hay partidas con crédito vigente ni compromiso para esa combinación.</div>
+    )
+  }
+
+  {
+    reporte && (
+      <section class="card f17-resumen" id="f17" data-reporte={payload}>
+        <div class="card-header">
+          <div class="f17-titulo">
+            <span class="eyebrow">
+              Jurisdicción {reporte.jurisdiccion.cod} · {reporte.jurisdiccion.denom}
+            </span>
+            <h2>
+              {reporte.catprog
+                ? `${reporte.catprog.cod} · ${reporte.catprog.denom}`
+                : `Programa ${reporte.programa.cod} · ${reporte.programa.denom}`}
+            </h2>
+            <p>
+              {reporte.catprog ? `Programa ${reporte.programa.cod} · ${reporte.programa.denom} · ` : "Total del programa (todas sus categorías) · "}
+              Fuente {reporte.fuente.cod} - {reporte.fuente.denom}
+            </p>
+          </div>
+          <div class="f17-acciones no-print">
+            <button class="btn btn-primary" type="button" id="descargar">
+              Descargar Excel <span aria-hidden="true">↓</span>
+            </button>
+            <button
+              class="btn btn-secondary"
+              type="button"
+              id="descargar-programa"
+              data-jurisdiccion={reporte.jurisdiccion.cod}
+              data-programa={reporte.programa.cod}
+              title="Un Excel con el total del programa y una hoja por categoría programática, para cada fuente"
+            >
+              Programa completo <span aria-hidden="true">↓</span>
+            </button>
+            <button class="btn btn-secondary" type="button" onclick="window.print()">
+              Imprimir
+            </button>
+          </div>
         </div>
 
-        {report.filas.length === 0 ? (
-          <p style="color:var(--color-gray-500);">No hay partidas con crédito vigente para este filtro.</p>
-        ) : (
-          <div style="overflow-x:auto;">
-            <table>
-              <thead>
-                <tr>
-                  <th>Partida</th>
-                  <th>Denominación</th>
-                  <th>Compromiso año anterior</th>
-                  <th>Igual trim. año anterior</th>
-                  <th>Crédito vigente</th>
-                  <th>Trim. I</th>
-                  <th>Trim. II</th>
-                  <th>Trim. III</th>
-                  <th>Trim. IV</th>
-                  <th>Disponible</th>
-                  <th>Total anual</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.filas.map((f) => (
-                  <tr class={f.excedido ? "excedido" : ""}>
-                    <td>{f.partidaCod}</td>
-                    <td>{f.partidaDenom}</td>
-                    <td>{fmt(f.compromisoAnioAnterior)}</td>
-                    <td>{fmt(f.igualTrimestreAnioAnterior)}</td>
-                    <td>{fmt(f.creditoVigente)}</td>
-                    <td>{fmt(f.trimestres[0])}</td>
-                    <td>{fmt(f.trimestres[1])}</td>
-                    <td>{fmt(f.trimestres[2])}</td>
-                    <td>{fmt(f.trimestres[3])}</td>
-                    <td>{fmt(f.disponible)}</td>
-                    <td>{fmt(f.totalAnual)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <dl class="f17-meta">
+          <div>
+            <dt>Trimestre a programar</dt>
+            <dd>{reporte.trimestre ? `${pad2(reporte.trimestre)} · ${TRIMESTRE_ROMANO[reporte.trimestre - 1]} trimestre ${reporte.anio}` : `Ejercicio ${reporte.anio} cerrado`}</dd>
           </div>
-        )}
-        <p style="margin-top:14px; font-size:0.82rem; color:var(--color-gray-500);">
-          Las filas en rojo superan con el total anual comprometido al crédito vigente.
-        </p>
-      </div>
-    )}
-  </section>
+          <div>
+            <dt>Crédito vigente al</dt>
+            <dd>{fechaCorta(reporte.corte.hasta)} (último dato de RAFAM)</dd>
+          </div>
+          <div>
+            <dt>Crédito vigente total</dt>
+            <dd>$ {fmt(reporte.totales.creditoVigente)}</dd>
+          </div>
+          <div>
+            <dt>Comprometido en el año</dt>
+            <dd>$ {fmt(reporte.totales.totalAnual + reporte.totales.enCurso)}</dd>
+          </div>
+        </dl>
+
+        <div class="f17-leyenda">
+          <span><i style="background:var(--f17-ejecutado)"></i>Trimestre ejecutado</span>
+          {reporte.trimestre && <span><i style="background:var(--f17-programar)"></i>Trimestre a programar (editable)</span>}
+          <span><i style="background:var(--f17-excedida)"></i>Partida excedida: el total anual supera al crédito vigente</span>
+        </div>
+
+        <div class="table-container">
+          <table class="table f17-table" id="f17-tabla">
+            <thead>
+              <tr>
+                <th class="t-oscuro">Fte.</th>
+                <th class="t-oscuro">Partida</th>
+                <th class="t-oscuro" style="text-align:left">Denominación</th>
+                <th class="t-oscuro">Compromiso del año anterior</th>
+                <th class="t-oscuro">Igual trimestre año anterior</th>
+                <th class="t-oscuro">Crédito vigente</th>
+                {hayEnCurso && <th title="Informativo: lo comprometido en el trimestre que se programa, hasta la fecha de corte">Ya comprometido trim. {pad2(T!)} al {fechaCorta(reporte.corte.hasta).slice(0, 5)}</th>}
+                {[1, 2, 3, 4].map((t) => (
+                  <th class={reporte.trimestre !== null && t >= reporte.trimestre ? "t-programar" : "t-ejecutado"}>
+                    Trimestre {TRIMESTRE_ROMANO[t - 1]}
+                  </th>
+                ))}
+                <th class="t-oscuro">Disponible{reporte.trimestre ? ` (al trim. ${pad2(reporte.trimestre)})` : ""}</th>
+                <th class="t-oscuro">Total anual</th>
+              </tr>
+            </thead>
+            <tbody>
+              {reporte.filas.map((f, i) => (
+                <tr class:list={{ excedida: f.excedida }} data-fila={i}>
+                  <td class="num">{f.fuenteCod}</td>
+                  <td class="partida">{f.partidaCod}</td>
+                  <td class="denominacion">{f.partidaDenom}</td>
+                  <td class="num">{fmt(f.compromisoAnioAnterior)}</td>
+                  <td class="num">{fmt(f.igualTrimestreAnioAnterior)}</td>
+                  <td class="num" data-vigente={f.creditoVigente}>{fmt(f.creditoVigente)}</td>
+                  {hayEnCurso && <td class="num info">{fmt(f.enCurso)}</td>}
+                  {f.trimestres.map((v, t) =>
+                    v === null ? (
+                      <td class="num">
+                        <input
+                          class="f17-input"
+                          inputmode="decimal"
+                          autocomplete="off"
+                          aria-label={`Trimestre ${TRIMESTRE_ROMANO[t]} · partida ${f.partidaCod}`}
+                          data-trim={t}
+                        />
+                      </td>
+                    ) : (
+                      <td class="num">{fmt(v)}</td>
+                    )
+                  )}
+                  <td class="num" data-disponible>{fmt(f.disponible)}</td>
+                  <td class="num" data-total>{fmt(f.totalAnual)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="3">Total</td>
+                <td class="num">{fmt(reporte.totales.compromisoAnioAnterior)}</td>
+                <td class="num">{fmt(reporte.totales.igualTrimestreAnioAnterior)}</td>
+                <td class="num">{fmt(reporte.totales.creditoVigente)}</td>
+                {hayEnCurso && <td class="num info">{fmt(reporte.totales.enCurso)}</td>}
+                {reporte.totales.trimestres.map((v, t) => (
+                  <td class="num" data-total-trim={t}>{fmt(v ?? 0)}</td>
+                ))}
+                <td class="num" data-total-disponible>{fmt(reporte.totales.disponible)}</td>
+                <td class="num" data-total-anual>{fmt(reporte.totales.totalAnual)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+
+        <div class="f17-notas">
+          <ul>
+            <li>
+              <strong>El Excel no reemplaza la carga en RAFAM.</strong> Es una plantilla prellenada para ahorrar trabajo: distribuí
+              las partidas en los trimestres a programar según el <a href="/instructivos/f17">instructivo</a> y después hacé la
+              carga manual en RAFAM.
+            </li>
+            <li>
+              Las partidas en rojo tienen crédito disponible negativo (el total anual supera al crédito vigente) y no se cargan en
+              el Formulario 17.
+            </li>
+            <li>
+              El crédito vigente es el del {fechaCorta(reporte.corte.hasta)}, último día con información de RAFAM. El compromiso
+              de cada trimestre ejecutado es la suma de lo comprometido en sus tres meses.
+            </li>
+            <li>
+              Si el programa tiene crédito en más de una fuente de financiamiento hay un formulario por fuente. «Programa completo»
+              baja un solo Excel con todas las fuentes, el total del programa y cada categoría programática.
+            </li>
+          </ul>
+        </div>
+      </section>
+    )
+  }
 </Base>
 
 <script>
-  // @ts-nocheck -- @cloudflare/workers-types pisa lib.dom acá adentro; es JS de browser normal.
-  // Auto-envía el formulario al cambiar jurisdicción/programa/categoría,
-  // para refrescar las opciones dependientes sin JS extra en el servidor.
-  const form = document.querySelector("#filtros");
-  const jurisdiccion = document.querySelector("#jurisdiccion");
-  const programa = document.querySelector("#programa");
-  const catprog = document.querySelector("#catprog");
-
-  function resetDownstream(...els) {
-    for (const el of els) el.value = "";
-  }
-
-  jurisdiccion?.addEventListener("change", () => {
-    resetDownstream(programa, catprog);
-    form.submit();
-  });
-  programa?.addEventListener("change", () => {
-    resetDownstream(catprog);
-    form.submit();
-  });
-  catprog?.addEventListener("change", () => form.submit());
+  import { iniciarFiltros, iniciarFormulario } from "../scripts/f17-page";
+  iniciarFiltros();
+  iniciarFormulario();
 </script>
