@@ -78,6 +78,16 @@ framework ("autoconfig") que, para la forma de build que genera
 con un proyecto Pages y pisa el `main`/`[assets]` que ya está bien puesto en
 `wrangler.toml`. Por eso el comando de deploy lleva `--no-autoconfig`.
 
+Si en algún build viejo esa detección llegó a correr (sin el flag), genera
+un `wrangler.jsonc` en la raíz del proyecto con `pages_build_output_dir` —
+y wrangler siempre prefiere `wrangler.jsonc` por sobre `wrangler.toml` si
+ambos existen. Como el build de Cloudflare cachea archivos entre corridas
+(asociado al repo, no al proyecto — persiste incluso si borrás y recreás el
+proyecto en Cloudflare), ese `wrangler.jsonc` viejo puede seguir aplicándose
+aunque el repo nunca lo haya tenido versionado. El script `prebuild`
+(`package.json`) borra cualquier `wrangler.jsonc`/`wrangler.json` suelto
+antes de cada build, así siempre gana el `wrangler.toml` del repo.
+
 1. En el dashboard de Cloudflare → tu proyecto → Settings → Builds:
    - **Build command**: `npm run build`
    - **Deploy command**: `npx wrangler deploy --no-autoconfig`
