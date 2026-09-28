@@ -1,0 +1,32 @@
+---
+import { INSTRUCTIVOS } from "../lib/instructivos";
+
+interface Props {
+  active?: string;
+}
+const { active } = Astro.props;
+---
+
+<header class="municipal-header">
+  <div class="municipal-header-inner">
+    <a href="/" class="municipal-brand" aria-label="Dirección de Presupuesto · Inicio">
+      <img src="/brand/moron-logo.png" alt="Municipio de Morón" width="72" height="74" />
+      <span>Dirección de<br /><strong>Presupuesto</strong></span>
+    </a>
+    <nav class="municipal-nav" aria-label="Navegación principal">
+      <a href="/" class:list={{ active: active === "inicio" }}>Inicio</a>
+      <a href="/formulario-17" class:list={{ active: active === "f17" }}>Formulario 17</a>
+      <div class:list={["nav-menu", { active: active === "instructivos" }]}>
+        <a href="/instructivos" class="nav-menu-trigger">Instructivos <span aria-hidden="true">▾</span></a>
+        <div class="nav-submenu">
+          {INSTRUCTIVOS.map((i) => <a href={`/instructivos/${i.slug}`}>{i.menu}</a>)}
+        </div>
+      </div>
+      <a href="/#calendario" class:list={{ active: active === "calendario" }}>Calendario</a>
+      <a href="/lista-de-difusion" class:list={{ active: active === "mailing" }}>Lista de difusión</a>
+    </nav>
+    <div class="municipal-account">
+      <a class="header-button" href="/admin">Panel<span aria-hidden="true">↗</span></a>
+    </div>
+  </div>
+</header>

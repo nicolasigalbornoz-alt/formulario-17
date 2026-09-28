@@ -9,3 +9,5 @@ scripts/out/
 .dev.vars
 *.log
 .DS_Store
+_work/
+logs/

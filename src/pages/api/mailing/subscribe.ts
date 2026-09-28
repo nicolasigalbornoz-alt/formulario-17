@@ -1,16 +1,14 @@
 import type { APIRoute } from "astro";
-import { isValidEmail, suscribir } from "../../../lib/mailing";
+import { leerFormulario, suscribir } from "../../../lib/mailing";
 
 export const POST: APIRoute = async ({ request, locals, redirect }) => {
   const form = await request.formData();
-  const email = String(form.get("email") || "");
-  const nombre = String(form.get("nombre") || "");
+  // Campo trampa: si viene completo es un bot. Se responde como si nada.
+  if (String(form.get("sitio_web") ?? "").trim()) return redirect("/lista-de-difusion?ok=1", 303);
 
-  if (!isValidEmail(email)) {
-    return redirect("/mailing?error=email");
-  }
+  const leido = leerFormulario(form);
+  if ("error" in leido) return redirect(`/lista-de-difusion?error=${encodeURIComponent(leido.error)}`, 303);
 
-  const db = locals.runtime.env.DB;
-  await suscribir(db, email, nombre || null);
-  return redirect("/mailing?ok=1");
+  await suscribir(locals.runtime.env.DB, leido.datos);
+  return redirect("/lista-de-difusion?ok=1", 303);
 };

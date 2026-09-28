@@ -1,53 +1,148 @@
 ---
 import Base from "../layouts/Base.astro";
+import { d1, getCorte, fechaCorta } from "../lib/f17";
 
-const accesos = [
+// Mismos calendarios que embebía el Sites ("Presentación de formularios
+// Trimestrales" y "Anuales").
+const CALENDARIOS = [
+  {
+    titulo: "Formularios trimestrales",
+    eyebrow: "F17 y seguimiento",
+    id: "0dd6f167e0b96c288034024575da83ac032093c2cf1de1fa93717d3d748e402f@group.calendar.google.com",
+    color: "#f83a22",
+  },
+  {
+    titulo: "Formularios anuales",
+    eyebrow: "Formulación",
+    id: "3c73e4796067ca159a71ad40fd2057008e65fbb9a93f5e43a633ffcfa17d2486@group.calendar.google.com",
+    color: "#b3dc6c",
+  },
+].map((c) => ({
+  ...c,
+  embed:
+    "https://calendar.google.com/calendar/embed?" +
+    new URLSearchParams({
+      src: c.id,
+      color: c.color,
+      ctz: "America/Argentina/Buenos_Aires",
+      mode: "MONTH",
+      showTitle: "0",
+      showPrint: "0",
+      showTz: "0",
+      showCalendars: "0",
+      hl: "es",
+    }),
+  agregar: `https://calendar.google.com/calendar/u/0?cid=${btoa(c.id).replace(/=+$/, "")}`,
+}));
+
+const ACCESOS = [
   {
     n: "01",
-    label: "Ejecución presupuestaria",
+    tag: "Programación del compromiso",
     title: "Formulario 17",
-    desc: "Crédito vigente y compromiso por programa, categoría programática, fuente y partida.",
+    text: "El F17 prellenado por programa o categoría programática, con el crédito vigente al último día con datos.",
     href: "/formulario-17",
   },
   {
     n: "02",
-    label: "Guías paso a paso",
+    tag: "Guías paso a paso",
     title: "Instructivos",
-    desc: "Cómo formular, informar trimestres y registrar gastos ejecutados.",
+    text: "Presupuesto por Programas, formularios de formulación, trimestrales y ejecutado de gastos.",
     href: "/instructivos",
   },
   {
     n: "03",
-    label: "Novedades por mail",
-    title: "Suscribirme",
-    desc: "Recibí avisos y recordatorios de entrega de la Dirección de Presupuesto.",
-    href: "/mailing",
+    tag: "Novedades y vencimientos",
+    title: "Lista de difusión",
+    text: "Recibí información de Presupuesto y recordatorios de las fechas de entrega de formularios.",
+    href: "/lista-de-difusion",
   },
 ];
+
+let corte = null;
+try {
+  corte = await getCorte(d1(Astro.locals.runtime.env.DB));
+} catch {
+  corte = null;
+}
 ---
 
-<Base title="Inicio" active="inicio">
-  <section class="hero">
-    <div class="hero__inner">
-      <span class="eyebrow eyebrow--on-dark">Municipio de Morón</span>
-      <h1>La información,<br />más cerca.</h1>
-      <p>Consultá la ejecución presupuestaria y los instructivos de la Dirección de Presupuesto.</p>
-      <a class="btn btn-primary btn-arrow" href="/formulario-17">Consultar Formulario 17</a>
-    </div>
-  </section>
+<Base title="Inicio" active="inicio" flush>
+  <div class="home-page">
+    <section class="municipal-hero">
+      <div class="hero-content">
+        <span class="eyebrow light">Municipio de Morón · Dirección de Presupuesto</span>
+        <h1>El presupuesto,<br />más cerca.</h1>
+        <p>
+          Descargá el Formulario 17 prellenado, consultá los instructivos y las fechas de entrega de cada
+          formulario.
+        </p>
+        <a class="btn btn-primary hero-button" href="/formulario-17">Consultar Formulario 17 <span aria-hidden="true">→</span></a>
+      </div>
+      <div class="hero-caption">
+        <span aria-hidden="true">●</span>
+        {corte ? `Datos de RAFAM al ${fechaCorta(corte.hasta)}` : "Presupuesto municipal"}
+      </div>
+    </section>
 
-  <section class="container" style="padding: 56px 24px;">
-    <span class="eyebrow">Accesos directos</span>
-    <h2 style="font-size: 2rem; margin: 8px 0 32px;">¿Qué querés consultar?</h2>
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(260px,1fr)); gap:24px;">
-      {accesos.map((a) => (
-        <a href={a.href} class="card" style="text-decoration:none; display:block;">
-          <div class="card__index">{a.n}</div>
-          <span class="card__label">{a.label}</span>
-          <div class="card__title">{a.title}</div>
-          <p style="color:var(--color-gray-500); font-size:0.9rem; margin-top:10px;">{a.desc}</p>
-        </a>
-      ))}
-    </div>
-  </section>
+    <section class="consultation-section">
+      <div class="section-heading">
+        <span class="eyebrow">Accesos directos</span>
+        <h2>¿Qué querés consultar?</h2>
+        <span class="heading-rule"></span>
+      </div>
+      <div class="service-grid">
+        {
+          ACCESOS.map((a) => (
+            <a class="service-card" href={a.href}>
+              <div class="service-card-top">
+                <span class="service-number">{a.n}</span>
+                <span class="service-arrow" aria-hidden="true">↗</span>
+              </div>
+              <span class="eyebrow">{a.tag}</span>
+              <h3>{a.title}</h3>
+              <p>{a.text}</p>
+              <span class="service-cta">
+                Ingresar <span aria-hidden="true">→</span>
+              </span>
+            </a>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="consultation-section" id="calendario" style="padding-top:0;">
+      <div class="section-heading">
+        <span class="eyebrow">Calendario de presentaciones</span>
+        <h2>Fechas de entrega</h2>
+        <p>Consultá cuándo vence cada formulario. Agregá los calendarios a tu Google Calendar para tenerlos a mano.</p>
+        <span class="heading-rule"></span>
+      </div>
+      <div class="calendar-grid">
+        {
+          CALENDARIOS.map((c) => (
+            <div class="calendar-card">
+              <span class="eyebrow">{c.eyebrow}</span>
+              <h3>{c.titulo}</h3>
+              <iframe src={c.embed} title={`Calendario: ${c.titulo}`} loading="lazy" />
+              <a href={c.agregar} target="_blank" rel="noreferrer">
+                Agregar a mi Google Calendar <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+          ))
+        }
+      </div>
+    </section>
+
+    <section class="consultation-help">
+      <div>
+        <span class="eyebrow">Consultas</span>
+        <h2>¿Dudas con algún formulario?</h2>
+      </div>
+      <p>
+        Escribinos a <a href="mailto:dir.presupuesto@moron.gob.ar">dir.presupuesto@moron.gob.ar</a> o llamá al interno
+        7714. Si querés recibir los recordatorios de vencimiento, <a href="/lista-de-difusion">sumate a la lista de difusión</a>.
+      </p>
+    </section>
+  </div>
 </Base>

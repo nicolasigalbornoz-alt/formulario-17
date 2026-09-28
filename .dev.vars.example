@@ -1,0 +1,16 @@
+# Copiar a .dev.vars (no se commitea) para desarrollo local.
+
+# sha-256 de la contraseña del panel:
+#   node -e "console.log(require('crypto').createHash('sha256').update('TU_PASSWORD').digest('hex'))"
+ADMIN_PASSWORD_HASH=
+# Cualquier string largo y aleatorio.
+SESSION_SECRET=
+
+# Opcional: envío de avisos (ver README, "Envío de mails").
+# MAIL_PROVIDER=apps_script
+# MAIL_APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec
+# MAIL_TOKEN=
+# MAIL_PROVIDER=resend
+# RESEND_API_KEY=
+# MAIL_FROM=Presupuesto Morón <avisos@tu-dominio>
+# SITE_URL=https://formulario-17.<tu-subdominio>.workers.dev

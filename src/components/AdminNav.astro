@@ -1,0 +1,25 @@
+---
+interface Props {
+  active: "inicio" | "suscriptores" | "avisos" | "datos";
+}
+const { active } = Astro.props;
+const links = [
+  { key: "inicio", href: "/admin", label: "Resumen" },
+  { key: "suscriptores", href: "/admin/suscriptores", label: "Suscriptos" },
+  { key: "avisos", href: "/admin/avisos", label: "Avisos masivos" },
+  { key: "datos", href: "/admin/datos", label: "Datos de RAFAM" },
+];
+---
+
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Dirección de Presupuesto</span>
+    <h1>Panel administrativo</h1>
+  </div>
+  <form method="post" action="/api/admin/logout">
+    <button class="btn btn-secondary" type="submit">Salir <span aria-hidden="true">↗</span></button>
+  </form>
+</div>
+<nav class="admin-nav" aria-label="Secciones del panel">
+  {links.map((l) => <a href={l.href} class:list={{ active: l.key === active }}>{l.label}</a>)}
+</nav>
