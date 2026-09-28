@@ -1,6 +1,6 @@
-# Formulario 17 — Dirección de Presupuesto, Morón
+# Formulario 17 — Subsecretaría de Planificación Presupuestaria y Estadísticas, Morón
 
-Reemplazo de las páginas de Google Sites de la Dirección de Presupuesto
+Reemplazo de las páginas de Google Sites de la Subsecretaría de Planificación Presupuestaria y Estadísticas
 (`presupuestomoron`), en especial **Formulario 17 → Programas** y
 **Formulario 17 → Categorías programáticas**, que ahora son una sola
 página. También reemplaza lo que había detrás:
@@ -49,7 +49,7 @@ partida:
 | Partidas | vigente > 0 al cierre del trimestre anterior | vigente > 0 al último dato (o con compromiso en el año: salen en rojo) |
 | Compromiso del año anterior | suma de `añoant` | compromiso de todo el año anterior |
 | Igual trimestre año anterior | `añoant`, trimestre D5 | compromiso del año anterior en el trimestre D5 |
-| **Crédito vigente** | `vigente` al cierre del trimestre anterior | **vigente al último día con información** (pedido de la Dirección) |
+| **Crédito vigente** | `vigente` al cierre del trimestre anterior | **vigente al último día con información** (pedido de la Subsecretaría) |
 | Trimestres I–IV | compromiso de cada trimestre < D5 | ídem, sumando los meses de cada trimestre |
 | Disponible / Total anual | `G − M` / `SUM(H:K)` | ídem (también como fórmulas en el Excel) |
 | Rojo | `M > G` | ídem |

@@ -2,7 +2,7 @@
  * Envío de los avisos de la lista de difusión del sitio de Presupuesto.
  *
  * Se publica UNA vez, con la cuenta desde la que tienen que salir los mails
- * (por ejemplo la de la Dirección de Presupuesto):
+ * (por ejemplo la de la Subsecretaría):
  *
  *  1. https://script.google.com -> Nuevo proyecto. Borrar lo que trae y pegar
  *     este archivo.
@@ -52,7 +52,7 @@ function doPost(e) {
         subject: m.subject,
         body: m.text,
         htmlBody: m.html,
-        name: datos.nombre || "Dirección de Presupuesto",
+        name: datos.nombre || "Subsecretaría de Planificación Presupuestaria y Estadísticas",
       });
       enviados++;
     } catch (err) {
