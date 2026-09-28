@@ -101,6 +101,16 @@ Hay dos formas de cargar los datos:
   Windows después de la corrida diaria de RAFAMOR. Necesita credenciales de
   Cloudflare: `npx wrangler login` una vez, o la variable
   `CLOUDFLARE_API_TOKEN` con permiso de edición sobre D1.
+- **Descarga + carga diaria en una PC con RAFAM** (la que usa la
+  Subsecretaría): la tarea programada *F17 - Descargar RAFAM y sincronizar*
+  corre `scripts\rafam-diario.ps1` de lunes a viernes a las 07:45. Baja de
+  RAFAM los reportes mensuales de gastos con el bot de RAFAMOR
+  (`rafam_ejecutado_bg.py --periodo mes --tipo gastos`) y después corre la
+  sincronización. El usuario y la clave de RAFAM se cargan una vez con
+  `scripts\guardar-credencial-rafam.bat` (doble clic) y quedan cifrados con la
+  cuenta de Windows (`%APPDATA%\formulario-17\rafam-credencial.xml`). Log en
+  `logs\rafam-diario.log`. **El bot cierra cualquier Contabilidad.exe abierto
+  al arrancar.**
 - **Manual**, desde el panel → Datos de RAFAM: subir el `.xls` exportado de
   RAFAM (del día 1 al último día del mes, o hasta hoy). Se interpreta en el
   navegador y reemplaza la foto de ese mes.
