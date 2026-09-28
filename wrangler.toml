@@ -22,7 +22,7 @@ binding = "ASSETS"
 [[d1_databases]]
 binding = "DB"
 database_name = "f17_db"
-database_id = "REPLACE_WITH_YOUR_D1_DATABASE_ID"
+database_id = "664ea2d3-98ae-407e-a79b-ec17294970ef"
 migrations_dir = "migrations"
 
 # Secrets (no van acá, se configuran con `wrangler secret put <NOMBRE>`,
