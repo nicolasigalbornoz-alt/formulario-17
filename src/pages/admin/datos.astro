@@ -11,7 +11,7 @@ const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "
 const q = Astro.url.searchParams;
 ---
 
-<Base title="Datos de RAFAM · Panel">
+<Base title="Datos de RAFAM · Panel" active="admin">
   <AdminNav active="datos" />
 
   {q.get("ok") && <div class="alert alert-success">{q.get("msg")}</div>}

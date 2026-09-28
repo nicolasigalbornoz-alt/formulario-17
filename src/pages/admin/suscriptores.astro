@@ -10,7 +10,7 @@ const filas = verTodos ? todos : activos;
 const fecha = (s: string | null) => (s ? s.slice(0, 10).split("-").reverse().join("/") : "");
 ---
 
-<Base title="Suscriptos · Panel">
+<Base title="Suscriptos · Panel" active="admin">
   <AdminNav active="suscriptores" />
   <div class="card">
     <div class="card-header">

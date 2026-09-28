@@ -11,8 +11,8 @@ import { fechaCorta, TRIMESTRE_ROMANO } from "../lib/f17";
 export interface HojaF17 {
   nombre: string;
   reporte: F17Reporte;
-  /** Montos cargados a mano en los trimestres a programar: [fila][trimestre 0..3]. */
-  programado?: (number | null)[][];
+  /** Aviso que va arriba de la hoja (ej. "consolidar con las demás categorías del programa"). */
+  aviso?: string;
 }
 
 const NAVY = "FF000A1E";
@@ -20,6 +20,7 @@ const GRIS = "FF666666";
 const AZUL = "FF305480";
 const ROJO = "FFC00000";
 const BLANCO = "FFFFFFFF";
+const CELESTE = "FFEEF3F9";
 const NUM = "#,##0.00";
 
 const solid = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
@@ -149,12 +150,12 @@ function agregarHoja(wb: any, hoja: HojaF17) {
     row.getCell(5).value = f.compromisoAnioAnterior;
     row.getCell(6).value = f.igualTrimestreAnioAnterior;
     row.getCell(7).value = f.creditoVigente;
+    // Los trimestres a programar quedan vacíos: se completan en el Excel.
     f.trimestres.forEach((v, t) => {
-      const cargado = hoja.programado?.[i]?.[t];
-      const valor = v ?? cargado ?? null;
-      if (valor !== null) row.getCell(8 + t).value = valor;
+      if (v !== null) row.getCell(8 + t).value = v;
+      else row.getCell(8 + t).fill = solid(CELESTE);
     });
-    const total = f.trimestres.reduce<number>((a, v, t) => a + (v ?? hoja.programado?.[i]?.[t] ?? 0), 0);
+    const total = f.totalAnual;
     row.getCell(12).value = { formula: `G${n}-M${n}`, result: f.creditoVigente - total };
     row.getCell(13).value = { formula: `SUM(H${n}:K${n})`, result: total };
     row.getCell(2).alignment = { horizontal: "center" };
@@ -193,6 +194,16 @@ function agregarHoja(wb: any, hoja: HojaF17) {
       c.font = { bold: true };
       c.border = { top: { style: "thin", color: { argb: GRIS } } };
     });
+  }
+
+  if (hoja.aviso) {
+    ws.mergeCells("B6:F6");
+    const aviso = ws.getCell("B6");
+    aviso.value = `⚠ ${hoja.aviso}`;
+    aviso.font = { bold: true, color: { argb: "FF805D18" } };
+    aviso.fill = solid("FFF7EFE1");
+    aviso.alignment = { wrapText: true, vertical: "middle" };
+    ws.getRow(6).height = 42;
   }
 
   const nota = ws.getCell(`B${ultima + 3}`);

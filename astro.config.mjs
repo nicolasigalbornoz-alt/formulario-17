@@ -16,6 +16,7 @@ export default defineConfig({
     "/formulario-17/programas": "/formulario-17",
     "/formulario-17/categorias-programaticas": "/formulario-17",
     "/mailing": "/lista-de-difusion",
+    "/admin/login": "/ingresar",
     "/instructivos/formulacion": "/instructivos",
     "/instructivos/trimestrales": "/instructivos/f17",
   },

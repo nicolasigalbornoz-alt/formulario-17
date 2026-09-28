@@ -1,12 +1,14 @@
 import type { APIRoute } from "astro";
+import { puedeVer } from "../../../lib/auth";
 import { d1, getCorte, getDatosPrograma } from "../../../lib/f17";
 
 // Datos de un programa completo (todas sus categorías y fuentes) para armar
-// el Excel "Programa completo" en el navegador.
+// el Excel "Programa con todas sus categorías" en el navegador.
 export const GET: APIRoute = async ({ url, locals }) => {
   const jurisdiccion = url.searchParams.get("jurisdiccion");
   const programa = url.searchParams.get("programa");
   if (!jurisdiccion || !programa) return new Response("Faltan jurisdiccion y programa", { status: 400 });
+  if (!puedeVer(locals.usuario!, jurisdiccion)) return new Response("Tu usuario no tiene acceso a esa jurisdicción", { status: 403 });
 
   const sql = d1(locals.runtime.env.DB);
   const corte = await getCorte(sql);

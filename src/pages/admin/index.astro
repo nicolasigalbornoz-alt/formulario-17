@@ -3,6 +3,7 @@ import Base from "../../layouts/Base.astro";
 import AdminNav from "../../components/AdminNav.astro";
 import { d1, getCorte, fechaCorta, trimestreAProgramar, TRIMESTRE_ROMANO } from "../../lib/f17";
 import { proveedorConfigurado } from "../../lib/mail-sender";
+import { estadoProgramas } from "../../lib/seguimiento";
 
 const env = Astro.locals.runtime.env;
 const db = env.DB;
@@ -13,9 +14,14 @@ const [corte, suscriptos, ultimoAviso] = await Promise.all([
 ]);
 const T = corte ? trimestreAProgramar(corte) : null;
 const proveedor = proveedorConfigurado(env);
+const estado = corte && T ? await estadoProgramas(d1(db), corte, T, null) : [];
+const cargados = estado.filter((e) => e.cargado_en).length;
+const usuarios = await db
+  .prepare("SELECT COUNT(*) AS total, SUM(activo = 1 AND clave_hash IS NULL) AS sin_clave FROM usuarios")
+  .first<{ total: number; sin_clave: number | null }>();
 ---
 
-<Base title="Panel administrativo">
+<Base title="Panel administrativo" active="admin">
   <AdminNav active="inicio" />
 
   <div class="card">
@@ -35,6 +41,13 @@ const proveedor = proveedorConfigurado(env);
         </dd>
       </div>
       <div>
+        <dt>Cargas del F17</dt>
+        <dd>
+          {estado.length ? `${cargados} de ${estado.length}` : "—"}
+          <small>programas marcados como cargados en RAFAM</small>
+        </dd>
+      </div>
+      <div>
         <dt>Suscriptos activos</dt>
         <dd>
           {suscriptos?.activos ?? 0}
@@ -51,19 +64,19 @@ const proveedor = proveedorConfigurado(env);
     </dl>
   </div>
 
-  <div class="service-grid">
-    <a class="service-card" href="/admin/suscriptores">
+  <div class="service-grid" style="margin-bottom:24px;">
+    <a class="service-card" href="/admin/seguimiento">
       <div class="service-card-top"><span class="service-number">01</span><span class="service-arrow" aria-hidden="true">↗</span></div>
-      <span class="eyebrow">Lista de difusión</span>
-      <h3 style="font-size:28px;">Suscriptos</h3>
-      <p>Ver quién está inscripto, dar de baja o reactivar y descargar la lista en CSV.</p>
+      <span class="eyebrow">Formulario 17</span>
+      <h3 style="font-size:28px;">Seguimiento</h3>
+      <p>Qué secretarías descargaron el F17 de cada programa y cuáles ya lo cargaron en RAFAM.</p>
       <span class="service-cta">Ingresar <span aria-hidden="true">→</span></span>
     </a>
-    <a class="service-card" href="/admin/avisos">
+    <a class="service-card" href="/admin/usuarios">
       <div class="service-card-top"><span class="service-number">02</span><span class="service-arrow" aria-hidden="true">↗</span></div>
-      <span class="eyebrow">Comunicación</span>
-      <h3 style="font-size:28px;">Avisos masivos</h3>
-      <p>Redactar un aviso o recordatorio de vencimiento y mandarlo a todos los suscriptos.</p>
+      <span class="eyebrow">Accesos</span>
+      <h3 style="font-size:28px;">Usuarios</h3>
+      <p>{usuarios?.total ?? 0} usuarios{usuarios?.sin_clave ? ` · ${usuarios.sin_clave} sin contraseña` : ""}. Crear, generar contraseñas y asignar jurisdicciones.</p>
       <span class="service-cta">Ingresar <span aria-hidden="true">→</span></span>
     </a>
     <a class="service-card" href="/admin/datos">
@@ -71,6 +84,22 @@ const proveedor = proveedorConfigurado(env);
       <span class="eyebrow">Formulario 17</span>
       <h3 style="font-size:28px;">Datos de RAFAM</h3>
       <p>Qué meses están cargados y subir a mano un reporte de ejecución de gastos de RAFAM.</p>
+      <span class="service-cta">Ingresar <span aria-hidden="true">→</span></span>
+    </a>
+  </div>
+  <div class="service-grid">
+    <a class="service-card" href="/admin/suscriptores">
+      <div class="service-card-top"><span class="service-number">04</span><span class="service-arrow" aria-hidden="true">↗</span></div>
+      <span class="eyebrow">Lista de difusión</span>
+      <h3 style="font-size:28px;">Suscriptos</h3>
+      <p>Ver quién está inscripto, dar de baja o reactivar y descargar la lista en CSV.</p>
+      <span class="service-cta">Ingresar <span aria-hidden="true">→</span></span>
+    </a>
+    <a class="service-card" href="/admin/avisos">
+      <div class="service-card-top"><span class="service-number">05</span><span class="service-arrow" aria-hidden="true">↗</span></div>
+      <span class="eyebrow">Comunicación</span>
+      <h3 style="font-size:28px;">Avisos masivos</h3>
+      <p>Redactar un aviso o recordatorio de vencimiento y mandarlo a todos los suscriptos.</p>
       <span class="service-cta">Ingresar <span aria-hidden="true">→</span></span>
     </a>
   </div>
