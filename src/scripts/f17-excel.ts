@@ -207,7 +207,7 @@ export async function generarLibro(hojas: HojaF17[]): Promise<ArrayBuffer> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ExcelJS: any = (mod as any).default ?? mod;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Dirección de Presupuesto · Municipio de Morón";
+  wb.creator = "Subsecretaría de Planificación Presupuestaria y Estadísticas · Municipio de Morón";
   wb.created = new Date();
   for (const h of hojas) agregarHoja(wb, h);
   return wb.xlsx.writeBuffer();

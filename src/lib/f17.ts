@@ -2,7 +2,7 @@
 //
 // Replica la plantilla "f17" de las planillas "registros f17/programa" y
 // "registros f17/categoría" (fórmulas de las filas 8 en adelante), con una
-// diferencia pedida por la Dirección de Presupuesto: el crédito vigente es el
+// diferencia pedida por la Subsecretaría: el crédito vigente es el
 // del último día con información cargada, no el del cierre del trimestre
 // anterior.
 //

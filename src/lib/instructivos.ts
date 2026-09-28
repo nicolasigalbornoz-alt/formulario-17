@@ -1,5 +1,5 @@
 // Contenido de "Instructivos", tomado tal cual del Google Sites de la
-// Dirección (presupuestomoron): cada guía es un PDF en el Drive de
+// Subsecretaría (presupuestomoron): cada guía es un PDF en el Drive de
 // Presupuesto y, en algunos casos, un video en YouTube. Para sumar o cambiar
 // una guía alcanza con editar esta lista.
 

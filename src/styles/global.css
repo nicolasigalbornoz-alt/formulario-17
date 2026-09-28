@@ -995,17 +995,14 @@ tr.excedida .f17-input {
   }
 }
 
-@media (max-width: 900px) {
+/* Con el nombre completo de la Subsecretaría el menú no entra al lado de la
+   marca: pasa a su propia fila, debajo. */
+@media (max-width: 1180px) {
   .municipal-header-inner {
-    gap: 15px;
-    padding: 16px 24px;
+    gap: 12px 22px;
   }
   .municipal-brand {
     margin-right: auto;
-  }
-  .municipal-brand img {
-    height: 65px;
-    width: 58px;
   }
   .municipal-account {
     order: 1;
@@ -1015,6 +1012,21 @@ tr.excedida .f17-input {
     gap: 22px;
     justify-content: flex-start;
     order: 2;
+  }
+  .municipal-nav a,
+  .nav-menu-trigger {
+    padding: 6px 0 9px;
+  }
+}
+
+@media (max-width: 900px) {
+  .municipal-header-inner {
+    gap: 15px;
+    padding: 16px 24px;
+  }
+  .municipal-brand img {
+    height: 65px;
+    width: 58px;
   }
   .municipal-nav a,
   .nav-menu-trigger {
