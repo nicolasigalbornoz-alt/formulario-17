@@ -1,11 +1,14 @@
 import { defineMiddleware } from "astro:middleware";
-import { SESSION_COOKIE, usuarioDeSesion } from "./lib/auth";
+import { SESSION_COOKIE, inicioDe, usuarioDeSesion } from "./lib/auth";
 
-// El inicio de sesión es la entrada obligatoria del sitio: ninguna página se
-// ve sin usuario. Quedan abiertos solo el ingreso, la baja de la lista de
-// difusión (el enlace de los mails) y la tarea programada de alertas (que se
-// valida con su propio token).
-const PUBLICAS = new Set(["/ingresar", "/api/auth/ingresar", "/api/auth/salir", "/api/cron/alertas", "/lista-de-difusion/baja", "/api/mailing/unsubscribe"]);
+// El inicio de sesión es la página principal ("/") y la entrada obligatoria del
+// sitio: ninguna otra página se ve sin usuario. Quedan abiertos solo el
+// ingreso, la baja de la lista de difusión (el enlace de los mails) y la tarea
+// programada de alertas (que se valida con su propio token).
+const PUBLICAS = new Set(["/", "/ingresar", "/api/auth/ingresar", "/api/auth/salir", "/api/cron/alertas", "/lista-de-difusion/baja", "/api/mailing/unsubscribe"]);
+
+/** Solo para administradores: el inicio y el panel. */
+const soloAdmin = (pathname: string, ruta: string) => ruta === "/inicio" || pathname.startsWith("/admin") || pathname.startsWith("/api/admin");
 
 export const onRequest = defineMiddleware(async (context, next) => {
   const { pathname, search } = context.url;
@@ -20,11 +23,11 @@ export const onRequest = defineMiddleware(async (context, next) => {
   const esApi = pathname.startsWith("/api/");
   if (!usuario) {
     if (esApi) return new Response(JSON.stringify({ error: "Tenés que ingresar." }), { status: 401, headers: { "content-type": "application/json" } });
-    return context.redirect(ruta === "/" ? "/ingresar" : `/ingresar?volver=${encodeURIComponent(pathname + search)}`);
+    return context.redirect(`/?volver=${encodeURIComponent(pathname + search)}`);
   }
-  if ((pathname.startsWith("/admin") || pathname.startsWith("/api/admin")) && usuario.rol !== "admin") {
+  if (soloAdmin(pathname, ruta) && usuario.rol !== "admin") {
     if (esApi) return new Response(JSON.stringify({ error: "Solo para administradores." }), { status: 403, headers: { "content-type": "application/json" } });
-    return context.redirect("/");
+    return context.redirect(inicioDe(usuario));
   }
   return next();
 });

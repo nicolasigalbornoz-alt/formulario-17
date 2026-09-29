@@ -4,6 +4,11 @@
 // plazos y vencimientos que carga el administrador en Panel -> Avisos y fechas.
 import { vencimientosEntre, hoyAR, TIPOS_VENCIMIENTO, type Vencimiento } from "../lib/novedades";
 
+interface Props {
+  /** false en la página del calendario, que ya tiene su título. */
+  encabezado?: boolean;
+}
+const { encabezado = true } = Astro.props;
 const db = Astro.locals.runtime.env.DB;
 const hoy = hoyAR();
 const pedido = Astro.url.searchParams.get("mes");
@@ -40,11 +45,15 @@ const siguiente = sumarMeses(inicio, 3).slice(0, 7);
 ---
 
 <section class="consultation-section" id="calendario" style="padding-top:0;">
-  <div class="section-heading">
-    <span class="eyebrow">Calendario de presentaciones</span>
-    <h2>Fechas de entrega</h2>
-    <span class="heading-rule"></span>
-  </div>
+  {
+    encabezado && (
+      <div class="section-heading">
+        <span class="eyebrow">Calendario de presentaciones</span>
+        <h2>Fechas de entrega</h2>
+        <span class="heading-rule"></span>
+      </div>
+    )
+  }
 
   <div class="calendario-barra">
     <a class="btn btn-secondary btn-sm" href={`?mes=${anterior}#calendario`}>← Anteriores</a>

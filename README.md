@@ -20,16 +20,20 @@ login.
 
 ## Qué hay en el sitio
 
-Todo el sitio está detrás del inicio de sesión: cualquier página sin sesión
-lleva a `/ingresar` (y después de ingresar vuelve a la que se pidió), y
-«Salir» vuelve al inicio de sesión. Solo quedan abiertos el ingreso, la baja
-de la lista de difusión (el enlace de los mails) y la tarea programada de
-alertas.
+La página principal (`/`) es el inicio de sesión, y todo lo demás pide
+usuario: cualquier página sin sesión lleva ahí (y después de ingresar vuelve
+a la que se pidió). Al ingresar, cada secretaría va directo a su
+**Formulario 17** y el administrador al **inicio** (`/inicio`, solo para
+administradores). «Salir» vuelve al inicio de sesión. Solo quedan abiertos
+el ingreso, la baja de la lista de difusión (el enlace de los mails) y la
+tarea programada de alertas. `/ingresar` redirige a `/` (enlaces viejos).
 
-- **Inicio**: accesos, avisos, el calendario de entregas y contacto. El
-  calendario es propio (reemplaza a los Google Calendar del Sites): tres
-  meses con los plazos y vencimientos que carga el administrador, en colores
-  por tipo (formularios trimestrales, anuales, otros).
+- **Inicio** (`/inicio`, administrador): accesos, avisos, el calendario de
+  entregas y contacto.
+- **Calendario** (`/calendario`): propio, reemplaza a los Google Calendar del
+  Sites. Tres meses con los plazos y vencimientos que carga el
+  administrador, en colores por tipo (formularios trimestrales, anuales,
+  otros).
 - **Formulario 17** (`/formulario-17`), en tres pestañas:
   - **Descargar prellenado**: se elige jurisdicción, programa, fuente y
     trimestre, y el formulario aparece recién con «Ver formulario».
@@ -66,7 +70,7 @@ alertas.
 Panel → Avisos y fechas:
 
 - **Fechas de vencimiento** (ej. «Presentación F17 del IV trimestre»): se
-  muestran en el calendario del inicio y arriba del F17. Pueden ser un plazo
+  muestran en el calendario y arriba del F17. Pueden ser un plazo
   («desde» opcional → «vence») y tienen un tipo (formularios trimestrales,
   anuales u otros) que les da el color en el calendario. La migración `0005`
   trae las fechas que estaban en los Google Calendar del Sites. Cada una manda alertas por mail a

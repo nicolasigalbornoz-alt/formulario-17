@@ -1,0 +1,17 @@
+---
+import Base from "../layouts/Base.astro";
+import Calendario from "../components/Calendario.astro";
+---
+
+<Base title="Calendario" active="calendario" description="Fechas de entrega de los formularios de presupuesto.">
+  <div class="page-heading">
+    <div>
+      <span class="eyebrow">Calendario de presentaciones</span>
+      <h1>Fechas de entrega</h1>
+      <p>Los plazos y vencimientos de los formularios trimestrales y anuales. Las alertas llegan por mail a la lista de difusión.</p>
+    </div>
+    <span class="page-heading-mark" aria-hidden="true">04</span>
+  </div>
+
+  <Calendario encabezado={false} />
+</Base>
