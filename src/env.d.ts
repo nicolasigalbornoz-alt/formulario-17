@@ -16,8 +16,14 @@ interface Env {
   SESSION_SECRET?: string;
   /** URL pública del sitio, para los enlaces de baja de los mails (si falta se usa la del pedido). */
   SITE_URL?: string;
-  /** "apps_script" | "resend" (ver src/lib/mail-sender.ts). */
+  /** "smtp" | "apps_script" | "resend" (ver src/lib/mail-sender.ts). */
   MAIL_PROVIDER?: string;
+  MAIL_SMTP_HOST?: string;
+  MAIL_SMTP_PORT?: string;
+  /** "tls" (465) | "starttls" (587); por defecto según el puerto. */
+  MAIL_SMTP_SECURITY?: string;
+  MAIL_SMTP_USER?: string;
+  MAIL_SMTP_PASSWORD?: string;
   MAIL_APPS_SCRIPT_URL?: string;
   MAIL_TOKEN?: string;
   RESEND_API_KEY?: string;

@@ -1,4 +1,4 @@
-// Lista de difusión de la Subsecretaría de Planificación Presupuestaria y Estadísticas. Pide los mismos datos que
+// Lista de difusión de la Subsecretaría de Planificación Presupuestaria y Estadística. Pide los mismos datos que
 // el formulario de Google "inscripción" que estaba embebido en el Sites.
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

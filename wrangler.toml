@@ -1,8 +1,8 @@
 name = "formulario-17"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
-# Las variables (MAIL_PROVIDER, SITE_URL, ...) se cargan en el dashboard:
-# sin esto, cada `wrangler deploy` las borraría.
+# Las variables que no están en [vars] (MAIL_PROVIDER, ...) se cargan en el
+# dashboard: sin esto, cada `wrangler deploy` las borraría.
 keep_vars = true
 
 # Deploy nativo de Workers (no Pages): el pipeline de "Workers Builds" de
@@ -14,14 +14,31 @@ keep_vars = true
 # como assets estáticos. `public/.assetsignore` excluye `_worker.js` y
 # `_routes.json` (que Astro regenera en cada build) de subirse como si
 # fueran archivos públicos.
-main = "dist/_worker.js/index.js"
+# worker/index.mjs envuelve la salida de Astro (dist/_worker.js) y le agrega
+# la tarea programada diaria de alertas de vencimientos.
+main = "worker/index.mjs"
 
 [assets]
 directory = "dist"
 binding = "ASSETS"
 
-# Creá la base con: wrangler d1 create f17_db
-# y reemplazá database_id por el que te devuelva ese comando.
+[vars]
+# URL pública: para los enlaces de los mails (baja, F17) que salen desde la
+# tarea programada, que no tiene un pedido del que tomar la dirección.
+SITE_URL = "https://formulario-17.moron-presupuesto.workers.dev"
+# Mails desde la casilla institucional por SMTP (ver src/lib/mail-sender.ts).
+# No sale nada hasta que se cargue la contraseña como secret:
+#   npx wrangler secret put MAIL_SMTP_PASSWORD --name formulario-17
+MAIL_PROVIDER = "smtp"
+MAIL_SMTP_HOST = "mail.moron.gob.ar"
+MAIL_SMTP_PORT = "465"
+MAIL_SMTP_USER = "dir.presupuesto@moron.gob.ar"
+
+# Alertas de vencimientos por mail: todos los días a las 11:00 UTC = 8:00 en Argentina.
+[triggers]
+crons = ["0 11 * * *"]
+
+# Base creada con `wrangler d1 create f17_db`.
 [[d1_databases]]
 binding = "DB"
 database_name = "f17_db"
@@ -32,10 +49,10 @@ migrations_dir = "migrations"
 # dashboard -> Workers -> formulario-17 -> Settings -> Variables and Secrets):
 #   ADMIN_PASSWORD_HASH   -> sha-256 de la contraseña del panel admin
 #   SESSION_SECRET        -> clave aleatoria para firmar la cookie de sesión
+#   MAIL_SMTP_PASSWORD    -> contraseña de dir.presupuesto@moron.gob.ar (si MAIL_PROVIDER=smtp)
 #   MAIL_TOKEN            -> clave compartida con el Apps Script de envío (si MAIL_PROVIDER=apps_script)
 #   RESEND_API_KEY        -> si MAIL_PROVIDER=resend
 # Variables (no secretas), en el mismo lugar:
-#   MAIL_PROVIDER         -> "apps_script" | "resend" (vacío = los avisos se guardan sin enviarse)
+#   (MAIL_PROVIDER está en [vars]; para cambiar de proveedor: "smtp" | "apps_script" | "resend")
 #   MAIL_APPS_SCRIPT_URL  -> URL /exec de scripts/mail_apps_script.gs publicado
 #   MAIL_FROM             -> remitente, si MAIL_PROVIDER=resend
-#   SITE_URL              -> URL pública del sitio (enlaces de baja en los mails)

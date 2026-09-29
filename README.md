@@ -1,6 +1,6 @@
-# Formulario 17 — Subsecretaría de Planificación Presupuestaria y Estadísticas, Morón
+# Formulario 17 — Subsecretaría de Planificación Presupuestaria y Estadística, Morón
 
-Reemplazo de las páginas de Google Sites de la Subsecretaría de Planificación Presupuestaria y Estadísticas
+Reemplazo de las páginas de Google Sites de la Subsecretaría de Planificación Presupuestaria y Estadística
 (`presupuestomoron`), en especial **Formulario 17 → Programas** y
 **Formulario 17 → Categorías programáticas**, que ahora son una sola
 página. También reemplaza lo que había detrás:
@@ -21,18 +21,16 @@ login.
 
 - **Inicio**: accesos, calendarios de entrega (trimestrales y anuales, los
   mismos Google Calendar del Sites) y contacto.
-- **Formulario 17** (`/formulario-17`, con usuario): el F17 prellenado, por
-  dos carriles separados que se eligen con un switch:
-  - **Por programa** (lo que se carga en RAFAM).
-  - **Por categoría programática**: avisa que hay que consolidarlo con las
-    demás categorías del programa antes de cargarlo (y el Excel lo repite
-    arriba de la hoja).
-
-  La página no guarda nada de lo que se programa: se descarga el Excel con
-  el formato de la plantilla (trimestres a programar vacíos, fórmulas de
-  Disponible y Total anual, formato condicional) y se completa ahí.
-  «Programa con todas sus categorías» baja un solo Excel con el total del
-  programa y cada categoría, para cada fuente.
+- **Formulario 17** (`/formulario-17`, con usuario): el F17 prellenado.
+  - **Trimestre a cargar**: se elige, pero solo entre los que tienen
+    cerrados todos los trimestres anteriores del año (sus tres meses
+    cargados completos desde RAFAM). Por defecto, el último disponible.
+  - Dos carriles con un switch: **por programa** (lo que se carga en RAFAM)
+    o **por categoría programática**, que avisa que hay que consolidarlo con
+    las demás categorías del programa (y el Excel lo repite arriba).
+  - La página no guarda nada de lo que se programa: un solo botón descarga
+    el Excel con el formato de la plantilla (trimestres a programar vacíos,
+    fórmulas de Disponible y Total anual, formato condicional).
 - **Instructivos** (`/instructivos`): PPP, F1, F4/F5, F7, F17 y Ejecutado de
   gastos, con los PDF de Drive y los videos de YouTube del Sites. Se editan
   en `src/lib/instructivos.ts`.
@@ -40,8 +38,27 @@ login.
   el formulario de Google (nombre, secretaría, cargo, programas, teléfono,
   mails) y baja.
 - **Panel** (`/admin`, solo administradores): seguimiento del F17,
-  usuarios, suscriptos (baja/reactivar, CSV), avisos masivos con historial,
-  y estado de los datos de RAFAM con subida manual de un reporte.
+  usuarios, avisos y fechas, suscriptos (baja/reactivar, CSV) y estado de
+  los datos de RAFAM con subida manual de un reporte.
+
+## Avisos, fechas y alertas por mail
+
+Panel → Avisos y fechas:
+
+- **Fechas de vencimiento** (ej. «Presentación F17 del IV trimestre»): se
+  muestran en el inicio y arriba del F17. Cada una manda alertas por mail a
+  la lista de difusión: unos días antes (0 a 15, se elige) y el mismo día.
+  Las manda una tarea programada del Worker todos los días a las 8:00
+  (`[triggers]` en `wrangler.toml`, `worker/index.mjs` →
+  `/api/cron/alertas`); cada alerta sale una sola vez y, si se cambia la
+  fecha, vuelven a salir. «Revisar alertas ahora» las fuerza a mano.
+- **Avisos**: título y texto que se muestran en el inicio y en el F17 entre
+  las fechas elegidas (pueden ir destacados) y, si se tilda, se mandan por
+  mail a la lista en el momento.
+- Historial de todos los mails enviados.
+
+Sin proveedor de mail configurado todo se publica en el sitio, pero los
+mails no salen (ver «Envío de mails»).
 
 ## Usuarios y seguimiento
 
@@ -144,17 +161,28 @@ Hay dos formas de cargar los datos:
 
 ## Envío de mails
 
-Los avisos masivos se mandan uno por uno (nadie ve los mails de los demás),
-con un enlace de baja al pie. Proveedor según `MAIL_PROVIDER`:
+Los mails (avisos y alertas) se mandan uno por uno a cada suscripto (nadie ve
+los mails de los demás), con un enlace de baja al pie y en el encabezado
+`List-Unsubscribe`. Proveedor según `MAIL_PROVIDER` (en `[vars]` de
+`wrangler.toml`):
 
-- `apps_script` (sin costo): publicar `scripts/mail_apps_script.gs` como Web
-  App con la cuenta de Presupuesto (instrucciones en el propio archivo) y
-  configurar `MAIL_APPS_SCRIPT_URL` y el secret `MAIL_TOKEN`. Google permite
-  100 destinatarios por día con una cuenta @gmail.com y 1.500 con Workspace.
-- `resend`: `RESEND_API_KEY` y `MAIL_FROM`, con un dominio verificado en
-  Resend.
+- `smtp` (**el configurado**): la casilla institucional
+  `dir.presupuesto@moron.gob.ar` en el servidor de correo municipal
+  (Zimbra/Postfix, `mail.moron.gob.ar`, puerto 465 con TLS), desde el propio
+  Worker (`src/lib/smtp.ts`, sin dependencias). **No sale ningún mail hasta
+  que se cargue la contraseña de la casilla como secret:**
+  ```bash
+  npx wrangler secret put MAIL_SMTP_PASSWORD --name formulario-17
+  ```
+  Probado contra un servidor SMTP falso local; la conexión real se prueba
+  con el primer envío (el servidor tiene que aceptar conexiones al 465 desde
+  internet).
+- `apps_script`: `scripts/mail_apps_script.gs` publicado como Web App con una
+  cuenta de Google (`MAIL_APPS_SCRIPT_URL`, secret `MAIL_TOKEN`).
+- `resend`: `RESEND_API_KEY` y `MAIL_FROM`, con dominio verificado.
 
-Sin proveedor, el aviso se guarda como "pendiente" y no se envía nada.
+Sin proveedor completo, los avisos se guardan y se publican en el sitio pero
+no se manda nada.
 
 ## Desarrollo local
 

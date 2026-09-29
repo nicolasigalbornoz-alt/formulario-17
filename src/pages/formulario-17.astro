@@ -1,5 +1,6 @@
 ---
 import Base from "../layouts/Base.astro";
+import Novedades from "../components/Novedades.astro";
 import {
   d1,
   getCorte,
@@ -10,9 +11,12 @@ import {
   getDatosPrograma,
   armarF17,
   fechaCorta,
-  trimestreAProgramar,
+  trimestresDisponibles,
+  trimestreElegido,
+  trimestreCerrado,
   trimestreDeMes,
   TRIMESTRE_ROMANO,
+  NOMBRE_TRIMESTRE,
   type CodDenom,
   type CategoriaConPrograma,
   type F17Reporte,
@@ -34,7 +38,9 @@ const catprog = modo === "categoria" ? params.get("catprog") || "" : "";
 let fuente = params.get("fuente") || "";
 
 const corte = await getCorte(sql);
-const T = corte ? trimestreAProgramar(corte) : null;
+// Trimestre que se carga: solo los que tienen cerrados los anteriores.
+const disponibles = corte ? trimestresDisponibles(corte) : [];
+const T = corte ? trimestreElegido(corte, params.get("trimestre")) : null;
 
 let jurisdicciones: CodDenom[] = [];
 let programas: CodDenom[] = [];
@@ -71,12 +77,14 @@ if (corte) {
   }
   if (jurisdiccion && programa && fuente) {
     const datos = await getDatosPrograma(sql, corte, jurisdiccion, programa);
-    reporte = datos ? armarF17(datos, fuente, modo === "categoria" ? catprog : null) : null;
+    reporte = datos ? armarF17({ ...datos, trimestre: T! }, fuente, modo === "categoria" ? catprog : null) : null;
     if (datos && modo === "categoria") otrasCategorias = datos.categorias.filter((c) => c.cod !== catprog);
   }
 }
 
-const hayEnCurso = Boolean(corte && T && trimestreDeMes(corte.mes) === T);
+// Columna informativa: lo ya comprometido en el trimestre que se carga.
+const hayEnCurso = Boolean(corte && T && corte.mesesCargados.some((m) => trimestreDeMes(m) === T));
+const tCerrado = Boolean(corte && T && trimestreCerrado(corte, T));
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const fmt = (n: number | null) =>
   n === null ? "" : n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -85,6 +93,8 @@ const categoriasPorPrograma = [...new Set(categorias.map((c) => c.programa.cod))
   categorias: categorias.filter((c) => c.programa.cod === p),
 }));
 const volverAca = Astro.url.pathname + Astro.url.search;
+const urlPorPrograma =
+  "/formulario-17?" + new URLSearchParams({ modo: "programa", jurisdiccion, programa, fuente, trimestre: String(T ?? "") });
 ---
 
 <Base title="Formulario 17" active="f17" description="Formulario 17 prellenado: programación financiera del compromiso por programa o categoría programática.">
@@ -100,6 +110,8 @@ const volverAca = Astro.url.pathname + Astro.url.search;
     </div>
     <span class="page-heading-mark" aria-hidden="true">17</span>
   </div>
+
+  <Novedades variante="compacto" />
 
   {sinPermiso && <div class="alert alert-error">Tu usuario no tiene acceso a esa jurisdicción.</div>}
   {
@@ -118,8 +130,8 @@ const volverAca = Astro.url.pathname + Astro.url.search;
           <div>
             <h2 class="card-title">Elegí el formulario</h2>
             <p class="card-intro">
-              Datos de RAFAM al <strong>{fechaCorta(corte.hasta)}</strong> ·{" "}
-              {T ? <>se programa el <strong>{TRIMESTRE_ROMANO[T - 1]} trimestre</strong> de {corte.anio}</> : <>ejercicio {corte.anio} cerrado</>}
+              Datos de RAFAM al <strong>{fechaCorta(corte.hasta)}</strong>. Solo se pueden cargar trimestres con los anteriores
+              cerrados: hoy, hasta el <strong>{TRIMESTRE_ROMANO[disponibles.at(-1)! - 1]}</strong> de {corte.anio}.
             </p>
           </div>
           <fieldset class="modo-switch">
@@ -141,12 +153,22 @@ const volverAca = Astro.url.pathname + Astro.url.search;
               <strong>Ojo: el Formulario 17 se carga en RAFAM por programa.</strong> Si lo sacás por categoría programática, antes
               de cargarlo tenés que consolidarlo con las demás categorías del mismo programa{otrasCategorias.length > 0
                 ? ` (${otrasCategorias.map((c) => c.cod).join(", ")})`
-                : ""}. Para tenerlas todas juntas usá «Programa con todas sus categorías».
+                : ""}.{programa && <> O <a href={urlPorPrograma}>sacalo directamente por programa</a>.</>}
             </div>
           )
         }
 
         <div class="search-bar">
+          <label class="filter-field" style="flex-grow:0; min-width:190px;">
+            <span>Trimestre a cargar</span>
+            <select class="form-control" name="trimestre" id="trimestre">
+              {disponibles.map((t) => (
+                <option value={t} selected={t === T}>
+                  {TRIMESTRE_ROMANO[t - 1]} · {NOMBRE_TRIMESTRE[t - 1]}
+                </option>
+              ))}
+            </select>
+          </label>
           <label class="filter-field">
             <span>Jurisdicción</span>
             <select class="form-control" name="jurisdiccion" id="jurisdiccion" required>
@@ -237,16 +259,6 @@ const volverAca = Astro.url.pathname + Astro.url.search;
             <button class="btn btn-primary" type="button" id="descargar">
               Descargar Excel <span aria-hidden="true">↓</span>
             </button>
-            <button
-              class="btn btn-secondary"
-              type="button"
-              id="descargar-programa"
-              data-jurisdiccion={reporte.jurisdiccion.cod}
-              data-programa={reporte.programa.cod}
-              title="Un Excel con el total del programa y una hoja por categoría programática, para cada fuente"
-            >
-              Programa con todas sus categorías <span aria-hidden="true">↓</span>
-            </button>
             <button class="btn btn-secondary" type="button" onclick="window.print()">
               Imprimir
             </button>
@@ -255,8 +267,8 @@ const volverAca = Astro.url.pathname + Astro.url.search;
 
         <dl class="f17-meta">
           <div>
-            <dt>Trimestre a programar</dt>
-            <dd>{reporte.trimestre ? `${pad2(reporte.trimestre)} · ${TRIMESTRE_ROMANO[reporte.trimestre - 1]} trimestre ${reporte.anio}` : `Ejercicio ${reporte.anio} cerrado`}</dd>
+            <dt>Trimestre que se carga</dt>
+            <dd>{pad2(reporte.trimestre)} · {TRIMESTRE_ROMANO[reporte.trimestre - 1]} trimestre {reporte.anio} ({NOMBRE_TRIMESTRE[reporte.trimestre - 1]})</dd>
           </div>
           <div>
             <dt>Crédito vigente al</dt>
@@ -288,7 +300,11 @@ const volverAca = Astro.url.pathname + Astro.url.search;
                 <th class="t-oscuro">Compromiso del año anterior</th>
                 <th class="t-oscuro">Igual trimestre año anterior</th>
                 <th class="t-oscuro">Crédito vigente</th>
-                {hayEnCurso && <th title="Informativo: lo comprometido en el trimestre que se programa, hasta la fecha de corte">Ya comprometido trim. {pad2(T!)} al {fechaCorta(reporte.corte.hasta).slice(0, 5)}</th>}
+                {hayEnCurso && (
+                  <th title="Informativo: lo ya comprometido en el trimestre que se carga">
+                    {tCerrado ? `Comprometido en el trim. ${pad2(T!)}` : `Ya comprometido trim. ${pad2(T!)} al ${fechaCorta(reporte.corte.hasta).slice(0, 5)}`}
+                  </th>
+                )}
                 {[1, 2, 3, 4].map((t) => (
                   <th class={reporte.trimestre !== null && t >= reporte.trimestre ? "t-programar" : "t-ejecutado"}>Trimestre {TRIMESTRE_ROMANO[t - 1]}</th>
                 ))}
@@ -341,10 +357,7 @@ const volverAca = Astro.url.pathname + Astro.url.search;
               El crédito vigente es el del {fechaCorta(reporte.corte.hasta)}, último día con información de RAFAM. El compromiso
               de cada trimestre ejecutado es la suma de lo comprometido en sus tres meses.
             </li>
-            <li>
-              Si el programa tiene crédito en más de una fuente de financiamiento hay un formulario por fuente. «Programa con
-              todas sus categorías» baja un solo Excel con todas las fuentes, el total del programa y cada categoría.
-            </li>
+            <li>Si el programa tiene crédito en más de una fuente de financiamiento hay un formulario por fuente.</li>
           </ul>
         </div>
       </section>
@@ -399,6 +412,7 @@ const volverAca = Astro.url.pathname + Astro.url.search;
                       <input type="hidden" name="jurisdiccion" value={e.jurisdiccion_codigo} />
                       <input type="hidden" name="programa" value={e.programa_codigo} />
                       <input type="hidden" name="cargado" value={e.cargado_en ? "0" : "1"} />
+                      <input type="hidden" name="trimestre" value={T} />
                       <input type="hidden" name="volver" value={volverAca} />
                       {e.cargado_en ? (
                         <>

@@ -10,7 +10,7 @@ interface Props {
   /** Sin márgenes ni ancho máximo (home con hero a todo el ancho). */
   flush?: boolean;
 }
-const { title, description = "Subsecretaría de Planificación Presupuestaria y Estadísticas — Municipio de Morón", active, flush = false } = Astro.props;
+const { title, description = "Subsecretaría de Planificación Presupuestaria y Estadística — Municipio de Morón", active, flush = false } = Astro.props;
 ---
 
 <!doctype html>
@@ -21,7 +21,7 @@ const { title, description = "Subsecretaría de Planificación Presupuestaria y 
     <meta name="theme-color" content="#212121" />
     <link rel="icon" type="image/png" href="/brand/favicon.png" />
     <link rel="preload" href="/fonts/neo-sans-ultra.woff2" as="font" type="font/woff2" crossorigin />
-    <title>{title} · Subsecretaría de Planificación Presupuestaria y Estadísticas · Morón</title>
+    <title>{title} · Subsecretaría de Planificación Presupuestaria y Estadística · Morón</title>
     <meta name="description" content={description} />
   </head>
   <body>

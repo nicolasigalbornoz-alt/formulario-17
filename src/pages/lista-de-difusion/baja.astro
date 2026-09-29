@@ -15,7 +15,7 @@ const email = Astro.url.searchParams.get("e") ?? "";
   </div>
   <form class="card" method="post" action="/api/mailing/unsubscribe" style="max-width:560px;">
     <p class="card-intro" style="margin-bottom:18px;">
-      Vas a dejar de recibir los avisos de la Subsecretaría de Planificación Presupuestaria y Estadísticas en <strong>{email || "tu mail"}</strong>.
+      Vas a dejar de recibir los avisos de la Subsecretaría de Planificación Presupuestaria y Estadística en <strong>{email || "tu mail"}</strong>.
     </p>
     <input type="hidden" name="email" value={email} />
     <button class="btn btn-primary" type="submit">Confirmar la baja</button>
