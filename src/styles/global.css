@@ -1091,6 +1091,111 @@ code.clave {
   border-top: 4px solid var(--moron-red);
 }
 
+/* Avisos y vencimientos */
+.alert-info {
+  background: #f1f5fa;
+  border: 1px solid #d5e0ec;
+  color: #27405e;
+}
+.novedades-grid {
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+}
+.aviso-card {
+  border-top: 4px solid #d5e0ec;
+}
+.aviso-card.destacado {
+  border-top-color: var(--moron-red);
+}
+.aviso-card h3 {
+  font: 700 20px "Neo Sans", sans-serif;
+  letter-spacing: 0;
+  margin: 6px 0 10px;
+}
+.aviso-card p {
+  color: #4a4a4a;
+  font-size: 15px;
+  line-height: 1.65;
+}
+.vencimientos-card {
+  border-top: 4px solid var(--moron-red);
+}
+.vencimientos-card ul {
+  list-style: none;
+  margin-top: 12px;
+}
+.vencimientos-card li {
+  border-top: 1px solid #eee;
+  display: flex;
+  gap: 16px;
+  padding: 12px 0;
+}
+.vencimientos-card li small {
+  color: #666;
+  display: block;
+  font-size: 13px;
+  margin-top: 3px;
+}
+.venc-fecha {
+  background: #f4f4f4;
+  border-radius: 3px;
+  color: #555;
+  flex: 0 0 56px;
+  font-size: 12px;
+  height: 56px;
+  padding-top: 6px;
+  text-align: center;
+  text-transform: uppercase;
+}
+.venc-fecha strong {
+  color: var(--moron-charcoal);
+  display: block;
+  font: 900 22px "Neo Sans Ultra", sans-serif;
+}
+.vencimientos-card li.urgente .venc-fecha {
+  background: var(--moron-red-dark);
+  color: #fff;
+}
+.vencimientos-card li.urgente .venc-fecha strong {
+  color: #fff;
+}
+.novedades-compacto {
+  margin-bottom: 24px;
+}
+.vencimientos-banda {
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--moron-border);
+  border-left: 4px solid var(--moron-red);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 12px 16px;
+}
+.venc-chip {
+  font-size: 13px;
+}
+.venc-chip.urgente {
+  color: var(--moron-red-dark);
+}
+.nuevo-bloque {
+  border-top: 1px solid #eee;
+  margin-top: 20px;
+  padding-top: 20px;
+}
+.checkbox-inline {
+  align-items: center;
+  display: inline-flex;
+  font-size: 14px;
+  gap: 8px;
+  margin: 4px 18px 10px 0;
+}
+.checks {
+  display: flex;
+  flex-wrap: wrap;
+}
+
 /* ---------------------------------------------------------------- responsive */
 
 @media (max-width: 1330px) {
@@ -1161,7 +1266,8 @@ code.clave {
     gap: 25px;
   }
   .calendar-grid,
-  .instructivo-layout {
+  .instructivo-layout,
+  .novedades-grid {
     grid-template-columns: 1fr;
   }
 }

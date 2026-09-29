@@ -1,13 +1,14 @@
 ---
 import Base from "../../layouts/Base.astro";
 import AdminNav from "../../components/AdminNav.astro";
-import { d1, getCorte, trimestreAProgramar, fechaCorta, TRIMESTRE_ROMANO } from "../../lib/f17";
+import { d1, getCorte, trimestreElegido, trimestresDisponibles, fechaCorta, TRIMESTRE_ROMANO, NOMBRE_TRIMESTRE } from "../../lib/f17";
 import { estadoProgramas, fechaHoraAR, type EstadoPrograma } from "../../lib/seguimiento";
 
 const db = Astro.locals.runtime.env.DB;
 const sql = d1(db);
 const corte = await getCorte(sql);
-const T = corte ? trimestreAProgramar(corte) : null;
+const T = corte ? trimestreElegido(corte, Astro.url.searchParams.get("trimestre")) : null;
+const disponibles = corte ? trimestresDisponibles(corte) : [];
 const estado: EstadoPrograma[] = corte && T ? await estadoProgramas(sql, corte, T, null) : [];
 const filtro = Astro.url.searchParams.get("ver") ?? "todos"; // todos | pendientes
 
@@ -41,7 +42,7 @@ const volverAca = Astro.url.pathname + Astro.url.search;
 <Base title="Seguimiento · Panel" active="admin">
   <AdminNav active="seguimiento" />
 
-  {!T && <div class="alert alert-warning">{corte ? `El ejercicio ${corte.anio} está cerrado: no hay trimestre para programar.` : "Todavía no hay datos de RAFAM cargados."}</div>}
+  {!T && <div class="alert alert-warning">Todavía no hay datos de RAFAM cargados.</div>}
 
   {
     T && corte && (
@@ -58,8 +59,14 @@ const volverAca = Astro.url.pathname + Astro.url.search;
               </p>
             </div>
             <div class="f17-acciones">
-              <a class:list={["btn", filtro === "todos" ? "btn-primary" : "btn-secondary"]} href="?ver=todos">Todos</a>
-              <a class:list={["btn", filtro === "pendientes" ? "btn-primary" : "btn-secondary"]} href="?ver=pendientes">Solo pendientes</a>
+              {disponibles.map((t) => (
+                <a class:list={["btn btn-sm", t === T ? "btn-primary" : "btn-secondary"]} href={`?trimestre=${t}&ver=${filtro}`} title={NOMBRE_TRIMESTRE[t - 1]}>
+                  {TRIMESTRE_ROMANO[t - 1]} trim.
+                </a>
+              ))}
+              <span style="width:12px;" />
+              <a class:list={["btn btn-sm", filtro === "todos" ? "btn-primary" : "btn-secondary"]} href={`?trimestre=${T}&ver=todos`}>Todos</a>
+              <a class:list={["btn btn-sm", filtro === "pendientes" ? "btn-primary" : "btn-secondary"]} href={`?trimestre=${T}&ver=pendientes`}>Solo pendientes</a>
             </div>
           </div>
           <dl class="dl-grid">
@@ -165,7 +172,7 @@ const volverAca = Astro.url.pathname + Astro.url.search;
                     {filas.map((p) => (
                       <tr>
                         <td>
-                          <a href={`/formulario-17?jurisdiccion=${p.jurisdiccion_codigo}&programa=${p.programa_codigo}`}>
+                          <a href={`/formulario-17?trimestre=${T}&jurisdiccion=${p.jurisdiccion_codigo}&programa=${p.programa_codigo}`}>
                             <strong>{p.programa_codigo}</strong> · {p.programa}
                           </a>
                           {p.categorias > 1 && <small style="color:#777;"> ({p.categorias} categorías)</small>}
@@ -187,6 +194,7 @@ const volverAca = Astro.url.pathname + Astro.url.search;
                             <input type="hidden" name="jurisdiccion" value={p.jurisdiccion_codigo} />
                             <input type="hidden" name="programa" value={p.programa_codigo} />
                             <input type="hidden" name="cargado" value={p.cargado_en ? "0" : "1"} />
+                            <input type="hidden" name="trimestre" value={T} />
                             <input type="hidden" name="volver" value={volverAca} />
                             {p.cargado_en ? (
                               <>

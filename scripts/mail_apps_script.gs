@@ -52,7 +52,7 @@ function doPost(e) {
         subject: m.subject,
         body: m.text,
         htmlBody: m.html,
-        name: datos.nombre || "Subsecretaría de Planificación Presupuestaria y Estadísticas",
+        name: datos.nombre || "Subsecretaría de Planificación Presupuestaria y Estadística",
       });
       enviados++;
     } catch (err) {

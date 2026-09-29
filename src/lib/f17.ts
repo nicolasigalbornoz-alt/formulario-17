@@ -8,7 +8,8 @@
 //
 //   Planilla (hoja f17)                        Acá
 //   ------------------------------------------ ------------------------------------------
-//   D5  Trimestre (elegido a mano)             trimestre de la fecha de corte + 1 día
+//   D5  Trimestre (elegido a mano)             se elige, pero solo entre los que tienen
+//                                              cerrados todos los trimestres anteriores
 //   C   UNIQUE(FILTER(partidas, vigente>0,     partidas con vigente > 0 a la fecha de corte
 //       trim = D5-1))                          (o con compromiso en el año: salen en rojo)
 //   E   SUMIFS(añoant compromiso)              compromiso total del año anterior
@@ -50,6 +51,8 @@ export interface Corte {
   /** Último día con información (fecha `hasta` del último reporte cargado), AAAA-MM-DD. */
   hasta: string;
   mesesCargados: number[];
+  /** Meses con el reporte del mes completo (del 1 al último día). */
+  mesesCompletos: number[];
 }
 
 export interface F17Fila {
@@ -71,8 +74,8 @@ export interface F17Fila {
 export interface F17Reporte {
   anio: number;
   corte: Corte;
-  /** Trimestre que se programa (D5 de la planilla); null si el ejercicio ya cerró. */
-  trimestre: number | null;
+  /** Trimestre que se carga (D5 de la planilla). */
+  trimestre: number;
   jurisdiccion: CodDenom;
   programa: CodDenom;
   catprog: CodDenom | null;
@@ -85,10 +88,10 @@ export interface F17Reporte {
 // Fecha de corte y trimestre
 
 export async function getCorte(sql: Sql, anio?: number | null): Promise<Corte | null> {
-  let rows: { anio: number; mes: number; hasta: string }[];
+  let rows: { anio: number; mes: number; hasta: string; mes_completo: number }[];
   try {
     rows = await sql.all(
-      `SELECT anio, mes, hasta FROM rafam_cortes
+      `SELECT anio, mes, hasta, mes_completo FROM rafam_cortes
        WHERE anio = COALESCE(?, (SELECT MAX(anio) FROM rafam_cortes))
        ORDER BY mes`,
       anio ?? null
@@ -100,21 +103,44 @@ export async function getCorte(sql: Sql, anio?: number | null): Promise<Corte | 
   }
   if (rows.length === 0) return null;
   const ultimo = rows.reduce((a, b) => (b.hasta > a.hasta ? b : a));
-  return { anio: ultimo.anio, mes: ultimo.mes, hasta: ultimo.hasta, mesesCargados: rows.map((r) => r.mes) };
+  return {
+    anio: ultimo.anio,
+    mes: ultimo.mes,
+    hasta: ultimo.hasta,
+    mesesCargados: rows.map((r) => r.mes),
+    mesesCompletos: rows.filter((r) => r.mes_completo).map((r) => r.mes),
+  };
+}
+
+/** Un trimestre está cerrado cuando sus tres meses están cargados completos. */
+export function trimestreCerrado(corte: Corte, t: number): boolean {
+  return [3 * t - 2, 3 * t - 1, 3 * t].every((m) => corte.mesesCompletos.includes(m));
 }
 
 /**
- * Trimestre a programar = el del día siguiente al corte. Con datos al 24/09
- * se programa el 3.º (se muestran ejecutados el 1.º y el 2.º); con datos al
- * 30/09 ya cerró el 3.º y se programa el 4.º. Con datos al 31/12 el
- * ejercicio cerró: null.
+ * Trimestres que se pueden cargar: solo aquellos cuyos trimestres anteriores
+ * del año ya están cerrados (la información del pasado es definitiva). Con
+ * datos al 24/09 se pueden elegir el I, el II y el III; el IV recién cuando
+ * se cargue septiembre completo.
  */
-export function trimestreAProgramar(corte: Corte): number | null {
-  const d = new Date(`${corte.hasta}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + 1);
-  if (d.getUTCFullYear() > corte.anio) return null;
-  return Math.floor(d.getUTCMonth() / 3) + 1;
+export function trimestresDisponibles(corte: Corte): number[] {
+  let cerrados = 0;
+  while (cerrados < 4 && trimestreCerrado(corte, cerrados + 1)) cerrados++;
+  return Array.from({ length: Math.min(cerrados + 1, 4) }, (_, i) => i + 1);
 }
+
+/** Trimestre que se ofrece por defecto: el más reciente de los disponibles. */
+export function trimestreAProgramar(corte: Corte): number {
+  return trimestresDisponibles(corte).at(-1)!;
+}
+
+/** El trimestre pedido si está disponible; si no, el de por defecto. */
+export function trimestreElegido(corte: Corte, pedido: unknown): number {
+  const t = Number(pedido);
+  return trimestresDisponibles(corte).includes(t) ? t : trimestreAProgramar(corte);
+}
+
+export const NOMBRE_TRIMESTRE = ["enero a marzo", "abril a junio", "julio a septiembre", "octubre a diciembre"];
 
 export const trimestreDeMes = (mes: number) => Math.floor((mes - 1) / 3) + 1;
 
@@ -215,7 +241,8 @@ interface FilaAnterior {
 
 export interface DatosPrograma {
   corte: Corte;
-  trimestre: number | null;
+  /** Trimestre que se carga: se puede cambiar antes de armarF17 (ver trimestresDisponibles). */
+  trimestre: number;
   jurisdiccion: CodDenom;
   programa: CodDenom;
   categorias: CodDenom[];
@@ -302,8 +329,8 @@ export function armarF17(datos: DatosPrograma, fuente: string, catprog?: string 
   const enAlcance = (r: { catprog_codigo: string; fuente_codigo: string }) =>
     r.fuente_codigo === fuente && (!catprog || r.catprog_codigo === catprog);
 
-  const T = datos.trimestre; // null = ejercicio cerrado: los 4 trimestres son ejecutados
-  const cerrado = (t: number) => T === null || t < T;
+  const T = datos.trimestre;
+  const cerrado = (t: number) => t < T;
 
   const porPartida = new Map<string, { denom: string; vigente: number; comp: [number, number, number, number]; ant: [number, number, number, number] }>();
   const get = (cod: string, denom = "") => {
@@ -341,10 +368,10 @@ export function armarF17(datos: DatosPrograma, fuente: string, catprog?: string 
       partidaCod,
       partidaDenom: p.denom,
       compromisoAnioAnterior: c2(p.ant.reduce((a, v) => a + v, 0)),
-      igualTrimestreAnioAnterior: T ? c2(p.ant[T - 1]) : 0,
+      igualTrimestreAnioAnterior: c2(p.ant[T - 1]),
       creditoVigente: vigente,
       trimestres,
-      enCurso: T ? c2(p.comp[T - 1]) : 0,
+      enCurso: c2(p.comp[T - 1]),
       disponible: c2(vigente - totalAnual),
       totalAnual,
       excedida: totalAnual > vigente,

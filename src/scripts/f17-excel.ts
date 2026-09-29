@@ -26,20 +26,9 @@ const NUM = "#,##0.00";
 const solid = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-/** Nombre de hoja válido para Excel (máx. 31 caracteres, sin : \ / ? * [ ]). */
-export function nombreHoja(texto: string, usados: Set<string>): string {
-  let base = texto.replace(/[:\\/?*[\]]/g, " ").replace(/\s+/g, " ").trim().slice(0, 31) || "Hoja";
-  let nombre = base;
-  for (let i = 2; usados.has(nombre.toLowerCase()); i++) nombre = `${base.slice(0, 28)} ${i}`;
-  usados.add(nombre.toLowerCase());
-  return nombre;
-}
-
-export function nombreArchivo(r: F17Reporte, completo = false): string {
-  const t = r.trimestre ? `T${pad2(r.trimestre)}` : `${r.anio}`;
-  if (completo) return `F17_${t}_J${r.jurisdiccion.cod}_P${r.programa.cod}_completo.xlsx`;
+export function nombreArchivo(r: F17Reporte): string {
   const est = r.catprog ? `C${r.catprog.cod}` : `P${r.programa.cod}`;
-  return `F17_${t}_J${r.jurisdiccion.cod}_${est}_F${r.fuente.cod}.xlsx`;
+  return `F17_T${pad2(r.trimestre)}_J${r.jurisdiccion.cod}_${est}_F${r.fuente.cod}.xlsx`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -218,7 +207,7 @@ export async function generarLibro(hojas: HojaF17[]): Promise<ArrayBuffer> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ExcelJS: any = (mod as any).default ?? mod;
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Subsecretaría de Planificación Presupuestaria y Estadísticas · Municipio de Morón";
+  wb.creator = "Subsecretaría de Planificación Presupuestaria y Estadística · Municipio de Morón";
   wb.created = new Date();
   for (const h of hojas) agregarHoja(wb, h);
   return wb.xlsx.writeBuffer();

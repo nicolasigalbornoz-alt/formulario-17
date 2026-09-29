@@ -1,6 +1,7 @@
 ---
 import Base from "../layouts/Base.astro";
 import { d1, getCorte, fechaCorta } from "../lib/f17";
+import Novedades from "../components/Novedades.astro";
 
 // Mismos calendarios que embebía el Sites ("Presentación de formularios
 // Trimestrales" y "Anuales").
@@ -71,7 +72,7 @@ try {
   <div class="home-page">
     <section class="municipal-hero">
       <div class="hero-content">
-        <span class="eyebrow light">Municipio de Morón · Subsecretaría de Planificación Presupuestaria y Estadísticas</span>
+        <span class="eyebrow light">Municipio de Morón · Subsecretaría de Planificación Presupuestaria y Estadística</span>
         <h1>El presupuesto,<br />más cerca.</h1>
         <p>
           Descargá el Formulario 17 prellenado, consultá los instructivos y las fechas de entrega de cada
@@ -110,6 +111,8 @@ try {
         }
       </div>
     </section>
+
+    <Novedades />
 
     <section class="consultation-section" id="calendario" style="padding-top:0;">
       <div class="section-heading">

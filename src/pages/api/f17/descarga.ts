@@ -1,6 +1,6 @@
 import type { APIRoute } from "astro";
 import { puedeVer } from "../../../lib/auth";
-import { d1, getCorte, trimestreAProgramar } from "../../../lib/f17";
+import { d1, getCorte, trimestreElegido } from "../../../lib/f17";
 import { registrarDescarga, type ModoDescarga } from "../../../lib/seguimiento";
 
 const COD = /^[0-9.]{1,12}$/;
@@ -31,7 +31,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
   await registrarDescarga(db, {
     usuario: usuario.usuario,
     anio: corte.anio,
-    trimestre: trimestreAProgramar(corte),
+    trimestre: trimestreElegido(corte, b?.trimestre),
     modo,
     jurisdiccion,
     programa,

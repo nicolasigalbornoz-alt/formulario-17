@@ -34,17 +34,17 @@ const usuarios = await db
         </dd>
       </div>
       <div>
-        <dt>F17 que se está programando</dt>
+        <dt>Último trimestre que se puede cargar</dt>
         <dd>
-          {corte ? (T ? `${TRIMESTRE_ROMANO[T - 1]} trimestre ${corte.anio}` : `Ejercicio ${corte.anio} cerrado`) : "—"}
-          <small>Trimestre del día siguiente al último dato</small>
+          {corte && T ? `${TRIMESTRE_ROMANO[T - 1]} trimestre ${corte.anio}` : "—"}
+          <small>Los anteriores ya están cerrados en RAFAM</small>
         </dd>
       </div>
       <div>
         <dt>Cargas del F17</dt>
         <dd>
           {estado.length ? `${cargados} de ${estado.length}` : "—"}
-          <small>programas marcados como cargados en RAFAM</small>
+          <small>programas marcados como cargados en RAFAM ({T ? `${TRIMESTRE_ROMANO[T - 1]} trim.` : "—"})</small>
         </dd>
       </div>
       <div>
@@ -98,8 +98,8 @@ const usuarios = await db
     <a class="service-card" href="/admin/avisos">
       <div class="service-card-top"><span class="service-number">05</span><span class="service-arrow" aria-hidden="true">↗</span></div>
       <span class="eyebrow">Comunicación</span>
-      <h3 style="font-size:28px;">Avisos masivos</h3>
-      <p>Redactar un aviso o recordatorio de vencimiento y mandarlo a todos los suscriptos.</p>
+      <h3 style="font-size:28px;">Avisos y fechas</h3>
+      <p>Publicar avisos y fechas de vencimiento en el sitio, con alertas automáticas por mail a la lista.</p>
       <span class="service-cta">Ingresar <span aria-hidden="true">→</span></span>
     </a>
   </div>

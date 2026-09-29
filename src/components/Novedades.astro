@@ -1,0 +1,90 @@
+---
+// Avisos vigentes y próximas fechas de vencimiento que carga el
+// administrador (Panel -> Avisos y fechas).
+import { avisosVigentes, proximosVencimientos, fechaLarga, diasHasta } from "../lib/novedades";
+
+interface Props {
+  /** "completo" = inicio (sección propia); "compacto" = banda arriba del F17. */
+  variante?: "completo" | "compacto";
+}
+const { variante = "completo" } = Astro.props;
+const db = Astro.locals.runtime.env.DB;
+const [avisos, vencimientos] = await Promise.all([
+  avisosVigentes(db, variante === "compacto" ? 2 : 5),
+  proximosVencimientos(db, variante === "compacto" ? 3 : 6),
+]);
+const cuando = (iso: string) => {
+  const d = diasHasta(iso);
+  return d === 0 ? "hoy" : d === 1 ? "mañana" : `en ${d} días`;
+};
+---
+
+{
+  (avisos.length > 0 || vencimientos.length > 0) &&
+    (variante === "compacto" ? (
+      <div class="novedades-compacto no-print">
+        {avisos.map((a) => (
+          <div class:list={["alert", a.importante ? "alert-warning" : "alert-info"]}>
+            <strong>{a.titulo}.</strong> <span style="white-space:pre-line;">{a.texto}</span>
+          </div>
+        ))}
+        {vencimientos.length > 0 && (
+          <div class="vencimientos-banda">
+            <span class="eyebrow">Próximos vencimientos</span>
+            {vencimientos.map((v) => (
+              <span class:list={["venc-chip", { urgente: diasHasta(v.fecha) <= 3 }]}>
+                <strong>{fechaLarga(v.fecha)}</strong> · {v.titulo} <small>({cuando(v.fecha)})</small>
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    ) : (
+      <section class="consultation-section novedades" style="padding-top:0;">
+        <div class="section-heading">
+          <span class="eyebrow">Novedades</span>
+          <h2>Avisos y vencimientos</h2>
+          <span class="heading-rule" />
+        </div>
+        <div class="novedades-grid">
+          <div>
+            {avisos.length === 0 ? (
+              <p class="card-intro">No hay avisos por ahora.</p>
+            ) : (
+              avisos.map((a) => (
+                <article class:list={["card", "aviso-card", { destacado: a.importante }]}>
+                  <span class="eyebrow">{a.desde.split("-").reverse().join("/")}</span>
+                  <h3>{a.titulo}</h3>
+                  <p style="white-space:pre-line;">{a.texto}</p>
+                </article>
+              ))
+            )}
+          </div>
+          <div class="card vencimientos-card">
+            <span class="eyebrow">Próximos vencimientos</span>
+            {vencimientos.length === 0 ? (
+              <p class="card-intro" style="margin-top:10px;">No hay fechas cargadas.</p>
+            ) : (
+              <ul>
+                {vencimientos.map((v) => (
+                  <li class:list={{ urgente: diasHasta(v.fecha) <= 3 }}>
+                    <span class="venc-fecha">
+                      <strong>{v.fecha.slice(8, 10)}</strong>
+                      {["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"][Number(v.fecha.slice(5, 7)) - 1]}
+                    </span>
+                    <span>
+                      <strong>{v.titulo}</strong>
+                      <small>
+                        {fechaLarga(v.fecha)} · {cuando(v.fecha)}
+                      </small>
+                      {v.descripcion && <small>{v.descripcion}</small>}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </section>
+    ))
+}

@@ -2,85 +2,377 @@
 import Base from "../../layouts/Base.astro";
 import AdminNav from "../../components/AdminNav.astro";
 import { proveedorConfigurado } from "../../lib/mail-sender";
+import {
+  listarAvisos,
+  listarVencimientos,
+  guardarAviso,
+  guardarVencimiento,
+  borrar,
+  mandarALaLista,
+  enviarAlertasDelDia,
+  hoyAR,
+  fechaLarga,
+  diasHasta,
+} from "../../lib/novedades";
 
 const env = Astro.locals.runtime.env;
 const db = env.DB;
-const q = Astro.url.searchParams;
-const [activos, historial] = await Promise.all([
-  db.prepare("SELECT COUNT(*) AS n FROM suscriptores WHERE activo = 1").first<{ n: number }>(),
+const usuario = Astro.locals.usuario!;
+const sitio = (env.SITE_URL || Astro.url.origin).replace(/\/$/, "");
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+let ok: string | null = null;
+let error: string | null = null;
+
+if (Astro.request.method === "POST") {
+  const f = await Astro.request.formData();
+  const accion = String(f.get("accion") ?? "");
+  const id = Number(f.get("id")) || undefined;
+  // Los formularios mandan los saltos de línea como \r\n.
+  const texto = (k: string, max = 160) => String(f.get(k) ?? "").replace(/\r\n?/g, "\n").trim().slice(0, max);
+  try {
+    if (accion === "aviso") {
+      const titulo = texto("titulo");
+      const cuerpo = texto("texto", 5000);
+      const desde = texto("desde", 10) || hoyAR();
+      const hasta = texto("hasta", 10) || null;
+      const publicar = f.get("publicar") === "1";
+      const mail = f.get("mail") === "1";
+      if (!titulo || !cuerpo) error = "Completá el título y el texto.";
+      else if (!FECHA.test(desde) || (hasta && (!FECHA.test(hasta) || hasta < desde))) error = "Revisá las fechas del aviso.";
+      else if (!publicar && !mail) error = "Elegí publicarlo en el sitio, mandarlo por mail, o las dos cosas.";
+      else {
+        const partes: string[] = [];
+        if (publicar || id) {
+          await guardarAviso(db, { id, titulo, texto: cuerpo, desde, hasta, importante: f.get("importante") === "1", usuario: usuario.usuario });
+          partes.push(id ? "Aviso actualizado." : "Aviso publicado en el sitio.");
+        }
+        if (mail) partes.push((await mandarALaLista(env, sitio, titulo, cuerpo)).detalle);
+        ok = partes.join(" ");
+      }
+    } else if (accion === "vencimiento") {
+      const titulo = texto("titulo");
+      const fecha = texto("fecha", 10);
+      const alertaDias = Math.max(0, Math.min(30, Number(f.get("alerta_dias")) || 0));
+      if (!titulo || !FECHA.test(fecha)) error = "Completá el título y la fecha.";
+      else {
+        await guardarVencimiento(db, {
+          id,
+          titulo,
+          descripcion: texto("descripcion", 2000) || null,
+          fecha,
+          alertaDias,
+          alertaMismoDia: f.get("alerta_mismo_dia") === "1",
+          usuario: usuario.usuario,
+        });
+        ok = id ? "Fecha actualizada." : "Fecha cargada.";
+      }
+    } else if (accion === "borrar-aviso" && id) {
+      await borrar(db, "avisos", id);
+      ok = "Aviso borrado.";
+    } else if (accion === "borrar-vencimiento" && id) {
+      await borrar(db, "vencimientos", id);
+      ok = "Fecha borrada.";
+    } else if (accion === "alertas-ahora") {
+      const r = await enviarAlertasDelDia(env, sitio);
+      ok =
+        r.enviadas.length || r.pendientes.length
+          ? [r.enviadas.length && `Enviadas: ${r.enviadas.join(", ")}.`, r.pendientes.length && `Sin enviar: ${r.pendientes.join(", ")}.`]
+              .filter(Boolean)
+              .join(" ")
+          : "Hoy no corresponde ninguna alerta.";
+    }
+  } catch (e) {
+    error = `No se pudo: ${e instanceof Error ? e.message : e}`;
+  }
+}
+
+const hoy = hoyAR();
+const [avisos, vencimientos, historial] = await Promise.all([
+  listarAvisos(db),
+  listarVencimientos(db),
   db
     .prepare("SELECT id, asunto, destinatarios, enviados, estado, detalle, creado_en FROM avisos_enviados ORDER BY id DESC LIMIT 30")
-    .all<{ id: number; asunto: string; destinatarios: number; enviados: number; estado: string; detalle: string | null; creado_en: string }>(),
+    .all<{ id: number; asunto: string; destinatarios: number; enviados: number; estado: string; detalle: string | null; creado_en: string }>()
+    .then((r) => r.results ?? []),
 ]);
+const activos = await db.prepare("SELECT COUNT(*) AS n FROM suscriptores WHERE activo = 1").first<{ n: number }>();
 const proveedor = proveedorConfigurado(env);
-const fecha = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)} ${s.slice(11, 16)}`;
+const dm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+const fechaHora = (s: string) => new Date(`${s.replace(" ", "T")}Z`).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "short", timeStyle: "short" });
 const badge = (estado: string) => (estado === "enviado" ? "badge-success" : estado === "parcial" ? "badge-warning" : "badge-muted");
+const DIAS = [0, 1, 2, 3, 5, 7, 10, 15];
+const vigenteAviso = (a: { desde: string; hasta: string | null }) => a.desde <= hoy && (!a.hasta || a.hasta >= hoy);
 ---
 
-<Base title="Avisos masivos · Panel" active="admin">
+<Base title="Avisos y fechas · Panel" active="admin">
   <AdminNav active="avisos" />
 
-  {q.get("ok") && <div class:list={["alert", q.get("estado") === "enviado" ? "alert-success" : "alert-warning"]}>{q.get("msg")}</div>}
-  {q.get("error") && <div class="alert alert-error">Completá el asunto y el texto del aviso.</div>}
+  {error && <div class="alert alert-error">{error}</div>}
+  {ok && <div class="alert alert-success">{ok}</div>}
   {
     !proveedor && (
       <div class="alert alert-warning">
-        Todavía no hay un proveedor de mail configurado: los avisos se guardan pero no se envían. Ver «Envío de mails» en el
-        README (Apps Script con la cuenta de Presupuesto, o Resend).
+        {env.MAIL_PROVIDER === "smtp" && env.MAIL_SMTP_USER
+          ? `Los mails van a salir desde ${env.MAIL_SMTP_USER}, pero falta cargar su contraseña en Cloudflare (secret MAIL_SMTP_PASSWORD).`
+          : "Todavía no hay proveedor de mail configurado."}{" "}
+        Mientras tanto los avisos y fechas se publican en el sitio, pero los mails y las alertas no salen.
       </div>
     )
   }
 
-  <div class="instructivo-layout">
-    <form class="card" method="post" action="/api/admin/avisos" id="form-aviso">
-      <div class="card-header">
-        <div>
-          <h2 class="card-title">Nuevo aviso</h2>
-          <p class="card-intro">Se manda a los <strong>{activos?.n ?? 0}</strong> suscriptos activos, uno por uno (nadie ve los mails de los demás).</p>
-        </div>
-      </div>
-      <label class="form-group">Asunto
-        <input class="form-control" name="asunto" required maxlength="160" placeholder="Ej: Recordatorio: vence la presentación del F17 del IV trimestre" />
-      </label>
-      <label class="form-group">Texto
-        <textarea class="form-control" name="cuerpo" required maxlength="10000" placeholder="Escribí el aviso. Dejá una línea en blanco entre párrafos. Los enlaces (https://...) quedan clickeables."></textarea>
-        <small>Al pie de cada mail se agregan los datos de contacto de la Subsecretaría y un enlace para darse de baja.</small>
-      </label>
-      <div class="form-actions">
-        <button class="btn btn-primary" type="submit" disabled={!activos?.n}>
-          {proveedor ? `Enviar a ${activos?.n ?? 0} suscriptos` : "Guardar aviso (sin envío)"} <span aria-hidden="true">→</span>
-        </button>
-      </div>
-    </form>
-
-    <aside class="card">
-      <span class="eyebrow">Envío</span>
-      <h2 class="card-title" style="margin:8px 0 10px;">{proveedor ?? "Sin configurar"}</h2>
-      <p class="card-intro">
-        {
-          proveedor === "Google Apps Script"
-            ? "Sale desde la cuenta de Google que publicó el script. Google permite 100 destinatarios por día con una cuenta @gmail.com y 1.500 con Workspace."
-            : proveedor === "Resend"
-              ? "Sale desde la dirección configurada en MAIL_FROM."
-              : "Configurá MAIL_PROVIDER y sus credenciales en Cloudflare para que los avisos se envíen."
-        }
-      </p>
-    </aside>
-  </div>
-
+  <!-- Fechas de vencimiento -->
   <div class="card">
     <div class="card-header">
-      <h2 class="card-title">Historial</h2>
+      <div>
+        <h2 class="card-title">Fechas de vencimiento</h2>
+        <p class="card-intro">
+          Se muestran en el inicio y en el Formulario 17. Las alertas por mail a los {activos?.n ?? 0} suscriptos salen solas todos
+          los días a las 8:00: unos días antes (lo que elijas) y el mismo día.
+        </p>
+      </div>
+      <form method="post">
+        <input type="hidden" name="accion" value="alertas-ahora" />
+        <button class="btn btn-secondary btn-sm" type="submit" title="Manda ahora las alertas que correspondan hoy (no repite las ya enviadas)">
+          Revisar alertas ahora
+        </button>
+      </form>
     </div>
     {
-      historial.results.length === 0 ? (
-        <p class="empty-state">Todavía no se mandó ningún aviso.</p>
+      vencimientos.length === 0 ? (
+        <p class="empty-state">No hay fechas cargadas.</p>
       ) : (
         <div class="table-container">
           <table class="table">
             <thead>
               <tr>
-                <th>Fecha (UTC)</th>
+                <th>Fecha</th>
+                <th>Vencimiento</th>
+                <th>Alertas por mail</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {vencimientos.map((v) => {
+                const faltan = diasHasta(v.fecha, hoy);
+                return (
+                  <tr style={faltan < 0 ? "color:#999;" : ""}>
+                    <td style="white-space:nowrap;">
+                      <strong>{fechaLarga(v.fecha)}</strong>
+                      <br />
+                      <small>{faltan < 0 ? "vencido" : faltan === 0 ? "hoy" : `en ${faltan} días`}</small>
+                    </td>
+                    <td>
+                      <strong>{v.titulo}</strong>
+                      {v.descripcion && <div style="font-size:13px; color:#666;">{v.descripcion}</div>}
+                    </td>
+                    <td style="font-size:13px;">
+                      {v.alerta_dias > 0 && (
+                        <div>
+                          {v.alerta_dias} días antes:{" "}
+                          {v.alerta_anticipada_en ? <span class="badge badge-success">enviada {fechaHora(v.alerta_anticipada_en)}</span> : <span class="badge badge-muted">pendiente</span>}
+                        </div>
+                      )}
+                      {v.alerta_mismo_dia ? (
+                        <div>
+                          El mismo día:{" "}
+                          {v.alerta_mismo_dia_en ? <span class="badge badge-success">enviada {fechaHora(v.alerta_mismo_dia_en)}</span> : <span class="badge badge-muted">pendiente</span>}
+                        </div>
+                      ) : null}
+                      {!v.alerta_dias && !v.alerta_mismo_dia && <span style="color:#999;">Sin alertas</span>}
+                    </td>
+                    <td>
+                      <div class="table-actions">
+                        <details class="editar-usuario">
+                          <summary class="btn btn-secondary btn-sm">Editar</summary>
+                          <form method="post" class="card" style="margin-top:10px;">
+                            <input type="hidden" name="accion" value="vencimiento" />
+                            <input type="hidden" name="id" value={v.id} />
+                            <label class="form-group">Título
+                              <input class="form-control" name="titulo" value={v.titulo} required maxlength="160" />
+                            </label>
+                            <label class="form-group">Fecha
+                              <input class="form-control" type="date" name="fecha" value={v.fecha} required />
+                            </label>
+                            <label class="form-group">Detalle (opcional)
+                              <textarea class="form-control" name="descripcion" maxlength="2000" style="min-height:80px;">{v.descripcion}</textarea>
+                            </label>
+                            <label class="form-group">Alerta anticipada
+                              <select class="form-control" name="alerta_dias">
+                                {DIAS.map((d) => <option value={d} selected={d === v.alerta_dias}>{d === 0 ? "Sin alerta anticipada" : `${d} día${d > 1 ? "s" : ""} antes`}</option>)}
+                              </select>
+                            </label>
+                            <label class="checkbox-inline">
+                              <input type="checkbox" name="alerta_mismo_dia" value="1" checked={Boolean(v.alerta_mismo_dia)} /> Alerta el mismo día
+                            </label>
+                            <div class="form-actions">
+                              <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                            </div>
+                          </form>
+                        </details>
+                        <form method="post" class="confirmar" data-mensaje={`¿Borrar «${v.titulo}»?`}>
+                          <input type="hidden" name="accion" value="borrar-vencimiento" />
+                          <input type="hidden" name="id" value={v.id} />
+                          <button class="btn btn-secondary btn-sm" type="submit">Borrar</button>
+                        </form>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+    <form method="post" class="nuevo-bloque">
+      <input type="hidden" name="accion" value="vencimiento" />
+      <h3 class="card-title" style="font-size:16px; margin-bottom:14px;">Nueva fecha</h3>
+      <div class="form-row">
+        <label class="form-group">Título
+          <input class="form-control" name="titulo" required maxlength="160" placeholder="Ej: Presentación F17 del IV trimestre" />
+        </label>
+        <label class="form-group">Fecha
+          <input class="form-control" type="date" name="fecha" required min={hoy} />
+        </label>
+        <label class="form-group">Alerta anticipada
+          <select class="form-control" name="alerta_dias">
+            {DIAS.map((d) => <option value={d} selected={d === 3}>{d === 0 ? "Sin alerta anticipada" : `${d} día${d > 1 ? "s" : ""} antes`}</option>)}
+          </select>
+        </label>
+      </div>
+      <label class="form-group">Detalle (opcional)
+        <textarea class="form-control" name="descripcion" maxlength="2000" style="min-height:70px;" placeholder="Ej: Se carga en RAFAM por programa. Consultas al interno 7714."></textarea>
+      </label>
+      <label class="checkbox-inline">
+        <input type="checkbox" name="alerta_mismo_dia" value="1" checked /> Alerta el mismo día
+      </label>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Cargar fecha</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Avisos -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Avisos</h2>
+        <p class="card-intro">Se muestran en el inicio y en el Formulario 17 entre las fechas que elijas. Opcionalmente, se mandan por mail a la lista de difusión.</p>
+      </div>
+    </div>
+    {
+      avisos.length > 0 && (
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Aviso</th>
+                <th>Se muestra</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {avisos.map((a) => (
+                <tr>
+                  <td>
+                    <strong>{a.titulo}</strong> {a.importante ? <span class="badge badge-warning">destacado</span> : null}
+                    <div style="font-size:13px; color:#666; white-space:pre-line;">{a.texto.length > 220 ? `${a.texto.slice(0, 220)}…` : a.texto}</div>
+                  </td>
+                  <td style="font-size:13px; white-space:nowrap;">
+                    {dm(a.desde)} → {a.hasta ? dm(a.hasta) : "sin fin"}
+                    <br />
+                    <span class:list={["badge", vigenteAviso(a) ? "badge-success" : "badge-muted"]}>{vigenteAviso(a) ? "visible" : a.desde > hoy ? "programado" : "vencido"}</span>
+                  </td>
+                  <td>
+                    <div class="table-actions">
+                      <details class="editar-usuario">
+                        <summary class="btn btn-secondary btn-sm">Editar</summary>
+                        <form method="post" class="card" style="margin-top:10px;">
+                          <input type="hidden" name="accion" value="aviso" />
+                          <input type="hidden" name="id" value={a.id} />
+                          <input type="hidden" name="publicar" value="1" />
+                          <label class="form-group">Título
+                            <input class="form-control" name="titulo" value={a.titulo} required maxlength="160" />
+                          </label>
+                          <label class="form-group">Texto
+                            <textarea class="form-control" name="texto" required maxlength="5000">{a.texto}</textarea>
+                          </label>
+                          <div class="form-row">
+                            <label class="form-group">Desde
+                              <input class="form-control" type="date" name="desde" value={a.desde} required />
+                            </label>
+                            <label class="form-group">Hasta (opcional)
+                              <input class="form-control" type="date" name="hasta" value={a.hasta ?? ""} />
+                            </label>
+                          </div>
+                          <label class="checkbox-inline">
+                            <input type="checkbox" name="importante" value="1" checked={Boolean(a.importante)} /> Destacado
+                          </label>
+                          <div class="form-actions">
+                            <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                          </div>
+                        </form>
+                      </details>
+                      <form method="post" class="confirmar" data-mensaje={`¿Borrar el aviso «${a.titulo}»?`}>
+                        <input type="hidden" name="accion" value="borrar-aviso" />
+                        <input type="hidden" name="id" value={a.id} />
+                        <button class="btn btn-secondary btn-sm" type="submit">Borrar</button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
+    }
+    <form method="post" class="nuevo-bloque" id="form-aviso">
+      <input type="hidden" name="accion" value="aviso" />
+      <h3 class="card-title" style="font-size:16px; margin-bottom:14px;">Nuevo aviso</h3>
+      <label class="form-group">Título
+        <input class="form-control" name="titulo" required maxlength="160" placeholder="Ej: Ya está disponible el F17 del IV trimestre" />
+      </label>
+      <label class="form-group">Texto
+        <textarea class="form-control" name="texto" required maxlength="5000" placeholder="Dejá una línea en blanco entre párrafos. Los enlaces (https://...) quedan clickeables en el mail."></textarea>
+      </label>
+      <div class="form-row">
+        <label class="form-group">Mostrar desde
+          <input class="form-control" type="date" name="desde" value={hoy} required />
+        </label>
+        <label class="form-group">Hasta (opcional)
+          <input class="form-control" type="date" name="hasta" />
+        </label>
+      </div>
+      <div class="checks">
+        <label class="checkbox-inline"><input type="checkbox" name="publicar" value="1" checked /> Publicar en el sitio</label>
+        <label class="checkbox-inline"><input type="checkbox" name="importante" value="1" /> Destacado</label>
+        <label class="checkbox-inline"><input type="checkbox" name="mail" value="1" /> Mandar por mail a los {activos?.n ?? 0} suscriptos</label>
+      </div>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">Guardar aviso</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Historial de mails -->
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Mails enviados</h2>
+        <p class="card-intro">Envío: {proveedor ?? "sin configurar"}. Incluye los avisos mandados por mail y las alertas de vencimientos.</p>
+      </div>
+    </div>
+    {
+      historial.length === 0 ? (
+        <p class="empty-state">Todavía no se mandó ningún mail.</p>
+      ) : (
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
                 <th>Asunto</th>
                 <th>Enviados</th>
                 <th>Estado</th>
@@ -88,9 +380,9 @@ const badge = (estado: string) => (estado === "enviado" ? "badge-success" : esta
               </tr>
             </thead>
             <tbody>
-              {historial.results.map((a) => (
+              {historial.map((a) => (
                 <tr>
-                  <td style="white-space:nowrap;">{fecha(a.creado_en)}</td>
+                  <td style="white-space:nowrap;">{fechaHora(a.creado_en)}</td>
                   <td>{a.asunto}</td>
                   <td class="num">
                     {a.enviados} / {a.destinatarios}
@@ -110,14 +402,14 @@ const badge = (estado: string) => (estado === "enviado" ? "badge-success" : esta
 </Base>
 
 <script>
-  const form = document.querySelector<HTMLFormElement>("#form-aviso");
-  form?.addEventListener("submit", (e) => {
-    const boton = form.querySelector<HTMLButtonElement>("button[type=submit]")!;
-    if (!confirm(`${boton.textContent?.replace("→", "").trim()}: ¿confirmás?`)) {
-      e.preventDefault();
-      return;
-    }
-    boton.disabled = true;
-    boton.textContent = "Enviando…";
+  document.querySelectorAll<HTMLFormElement>("form.confirmar").forEach((f) =>
+    f.addEventListener("submit", (e) => {
+      if (!confirm(f.dataset.mensaje ?? "¿Confirmás?")) e.preventDefault();
+    })
+  );
+  const aviso = document.querySelector<HTMLFormElement>("#form-aviso");
+  aviso?.addEventListener("submit", (e) => {
+    const mail = aviso.querySelector<HTMLInputElement>('input[name="mail"]');
+    if (mail?.checked && !confirm("Se va a mandar por mail a toda la lista de difusión. ¿Confirmás?")) e.preventDefault();
   });
 </script>
