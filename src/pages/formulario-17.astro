@@ -150,7 +150,7 @@ const urlPorPrograma =
         {
           modo === "categoria" && (
             <div class="alert alert-warning aviso-consolidar" role="alert">
-              <strong>El Formulario 17 se carga en RAFAM por programa.</strong> Si lo sacás por categoría programática, antes
+              <strong>Advertencia: el Formulario 17 se carga en RAFAM por programa.</strong> Si lo sacás por categoría programática, antes
               de cargarlo tenés que consolidarlo con las demás categorías del mismo programa{otrasCategorias.length > 0
                 ? ` (${otrasCategorias.map((c) => c.cod).join(", ")})`
                 : ""}.{programa && <> O <a href={urlPorPrograma}>sacalo directamente por programa</a>.</>}
