@@ -29,5 +29,9 @@ export const onRequest = defineMiddleware(async (context, next) => {
     if (esApi) return new Response(JSON.stringify({ error: "Solo para administradores." }), { status: 403, headers: { "content-type": "application/json" } });
     return context.redirect(inicioDe(usuario));
   }
-  return next();
+  const respuesta = await next();
+  // Con sesión nada queda guardado en el navegador: después de «Salir», el
+  // botón «Atrás» vuelve a pedir la página y lleva al inicio de sesión.
+  respuesta.headers.set("Cache-Control", "no-store");
+  return respuesta;
 });
