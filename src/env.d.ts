@@ -4,7 +4,10 @@
 type Runtime = import("@astrojs/cloudflare").Runtime<Env>;
 
 declare namespace App {
-  interface Locals extends Runtime {}
+  interface Locals extends Runtime {
+    /** Usuario con sesión iniciada (lo carga src/middleware.ts), o null. */
+    usuario: import("./lib/auth").Usuario | null;
+  }
 }
 
 interface Env {

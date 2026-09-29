@@ -1,0 +1,299 @@
+---
+import Base from "../../layouts/Base.astro";
+import AdminNav from "../../components/AdminNav.astro";
+import { d1, getCorte, listJurisdicciones, type CodDenom } from "../../lib/f17";
+import {
+  listarUsuarios,
+  crearUsuario,
+  actualizarUsuario,
+  nuevaClave,
+  activarUsuario,
+  borrarUsuario,
+  validarUsuario,
+} from "../../lib/usuarios";
+import type { Rol } from "../../lib/auth";
+
+const db = Astro.locals.runtime.env.DB;
+
+// Las acciones se procesan acá mismo (no con redirect) para que una
+// contraseña generada se muestre una sola vez y nunca viaje en la URL.
+let ok: string | null = null;
+let error: string | null = null;
+let clavesNuevas: { usuario: string; nombre: string; clave: string }[] = [];
+
+if (Astro.request.method === "POST") {
+  const f = await Astro.request.formData();
+  const accion = String(f.get("accion") ?? "");
+  const id = Number(f.get("id"));
+  const texto = (k: string, max = 120) => String(f.get(k) ?? "").trim().slice(0, max);
+  const rol: Rol = f.get("rol") === "admin" ? "admin" : "secretaria";
+  const jurisdicciones = f.getAll("jurisdicciones").map(String).filter((j) => /^\d{2}$/.test(j));
+  const clave = texto("clave", 100);
+  if (clave && clave.length < 8) error = "La contraseña tiene que tener al menos 8 caracteres.";
+
+  try {
+    if (error) {
+      // nada
+    } else if (accion === "crear") {
+      const usuario = texto("usuario", 40).toLowerCase();
+      const nombre = texto("nombre");
+      error = validarUsuario(usuario) ?? (!nombre ? "Completá el nombre." : null);
+      if (!error && rol === "secretaria" && !jurisdicciones.length) error = "Elegí al menos una jurisdicción.";
+      if (!error) {
+        const r = await crearUsuario(db, { usuario, nombre, rol, jurisdicciones, clave: clave || null });
+        clavesNuevas = [{ usuario, nombre, clave: r.clave }];
+        ok = `Usuario «${usuario}» creado.`;
+      }
+    } else if (accion === "editar" && id) {
+      const nombre = texto("nombre");
+      if (!nombre) error = "Completá el nombre.";
+      else if (rol === "secretaria" && !jurisdicciones.length) error = "Elegí al menos una jurisdicción.";
+      else {
+        await actualizarUsuario(db, id, { nombre, rol, jurisdicciones });
+        ok = "Cambios guardados.";
+      }
+    } else if (accion === "clave" && id) {
+      const u = (await listarUsuarios(db)).find((x) => x.id === id);
+      if (u) {
+        clavesNuevas = [{ usuario: u.usuario, nombre: u.nombre, clave: await nuevaClave(db, id, clave || null) }];
+        ok = `Contraseña nueva para «${u.usuario}». Las sesiones abiertas de ese usuario se cerraron.`;
+      }
+    } else if (accion === "claves-pendientes") {
+      for (const u of (await listarUsuarios(db)).filter((x) => x.activo && !x.tiene_clave)) {
+        clavesNuevas.push({ usuario: u.usuario, nombre: u.nombre, clave: await nuevaClave(db, u.id) });
+      }
+      ok = clavesNuevas.length ? `Se generaron ${clavesNuevas.length} contraseñas.` : "Todos los usuarios activos ya tenían contraseña.";
+    } else if ((accion === "activar" || accion === "desactivar") && id) {
+      await activarUsuario(db, id, accion === "activar");
+      ok = accion === "activar" ? "Usuario activado." : "Usuario desactivado: ya no puede entrar.";
+    } else if (accion === "borrar" && id) {
+      await borrarUsuario(db, id);
+      ok = "Usuario borrado.";
+    }
+  } catch (e) {
+    error = /UNIQUE/i.test(String(e)) ? "Ya existe un usuario con ese nombre." : `No se pudo: ${e instanceof Error ? e.message : e}`;
+  }
+}
+
+const usuarios = await listarUsuarios(db);
+const corte = await getCorte(d1(db));
+const jurisdicciones: CodDenom[] = corte ? await listJurisdicciones(d1(db), corte) : [];
+const nombreJuris = (cod: string) => jurisdicciones.find((j) => j.cod === cod)?.denom ?? cod;
+const fecha = (s: string | null) =>
+  s ? new Date(`${s.replace(" ", "T")}Z`).toLocaleString("es-AR", { timeZone: "America/Argentina/Buenos_Aires", dateStyle: "short", timeStyle: "short" }) : "—";
+const sinClave = usuarios.filter((u) => u.activo && !u.tiene_clave).length;
+const csvClaves = clavesNuevas.length
+  ? "data:text/csv;charset=utf-8," +
+    encodeURIComponent("﻿Usuario,Nombre,Contraseña\r\n" + clavesNuevas.map((c) => `"${c.usuario}","${c.nombre.replace(/"/g, '""')}","${c.clave}"`).join("\r\n"))
+  : "";
+---
+
+<Base title="Usuarios · Panel" active="admin">
+  <AdminNav active="usuarios" />
+
+  {error && <div class="alert alert-error">{error}</div>}
+  {ok && <div class="alert alert-success">{ok}</div>}
+  {
+    clavesNuevas.length > 0 && (
+      <div class="card claves-nuevas">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">Contraseñas nuevas</h2>
+            <p class="card-intro">
+              <strong>Anotalas o descargalas ahora: no se vuelven a mostrar.</strong> Si se pierde una, generá otra.
+            </p>
+          </div>
+          <a class="btn btn-primary" href={csvClaves} download="usuarios-f17.csv">
+            Descargar CSV <span aria-hidden="true">↓</span>
+          </a>
+        </div>
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Usuario</th>
+              <th>Nombre</th>
+              <th>Contraseña</th>
+            </tr>
+          </thead>
+          <tbody>
+            {clavesNuevas.map((c) => (
+              <tr>
+                <td>
+                  <code>{c.usuario}</code>
+                </td>
+                <td>{c.nombre}</td>
+                <td>
+                  <code class="clave">{c.clave}</code>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )
+  }
+
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Usuarios</h2>
+        <p class="card-intro">
+          Cada secretaría ve y descarga solo el F17 de sus jurisdicciones. Los administradores ven todo, el seguimiento y este
+          panel.
+        </p>
+      </div>
+      {
+        sinClave > 0 && (
+          <form method="post">
+            <input type="hidden" name="accion" value="claves-pendientes" />
+            <button class="btn btn-primary" type="submit">
+              Generar contraseñas para los {sinClave} sin contraseña
+            </button>
+          </form>
+        )
+      }
+    </div>
+    <div class="table-container">
+      <table class="table" style="min-width:980px;">
+        <thead>
+          <tr>
+            <th>Usuario</th>
+            <th>Nombre</th>
+            <th>Rol</th>
+            <th>Jurisdicciones</th>
+            <th>Estado</th>
+            <th>Último ingreso</th>
+            <th>Acciones</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>admin</code></td>
+            <td>Administración</td>
+            <td><span class="badge badge-success">Administrador</span></td>
+            <td>Todas</td>
+            <td><span class="badge badge-success">Activo</span></td>
+            <td>—</td>
+            <td style="font-size:12px; color:#666;">Contraseña del secret ADMIN_PASSWORD_HASH (se cambia en Cloudflare)</td>
+          </tr>
+          {usuarios.map((u) => (
+            <tr>
+              <td>
+                <code>{u.usuario}</code>
+              </td>
+              <td>{u.nombre}</td>
+              <td>
+                <span class:list={["badge", u.rol === "admin" ? "badge-success" : "badge-muted"]}>{u.rol === "admin" ? "Administrador" : "Secretaría"}</span>
+              </td>
+              <td style="font-size:13px;">
+                {u.rol === "admin" ? "Todas" : (u.jurisdicciones ?? "").split(",").filter(Boolean).map((j) => `${j} ${nombreJuris(j)}`).join(" · ") || "—"}
+              </td>
+              <td>
+                {!u.activo ? (
+                  <span class="badge badge-muted">Desactivado</span>
+                ) : u.tiene_clave ? (
+                  <span class="badge badge-success">Activo</span>
+                ) : (
+                  <span class="badge badge-warning">Sin contraseña</span>
+                )}
+              </td>
+              <td style="font-size:13px; white-space:nowrap;">{fecha(u.ultimo_ingreso)}</td>
+              <td>
+                <div class="table-actions">
+                  <form method="post">
+                    <input type="hidden" name="accion" value="clave" />
+                    <input type="hidden" name="id" value={u.id} />
+                    <button class="btn btn-secondary btn-sm" type="submit">{u.tiene_clave ? "Nueva contraseña" : "Generar contraseña"}</button>
+                  </form>
+                  <form method="post">
+                    <input type="hidden" name="accion" value={u.activo ? "desactivar" : "activar"} />
+                    <input type="hidden" name="id" value={u.id} />
+                    <button class="btn btn-secondary btn-sm" type="submit">{u.activo ? "Desactivar" : "Activar"}</button>
+                  </form>
+                  <details class="editar-usuario">
+                    <summary class="btn btn-secondary btn-sm">Editar</summary>
+                    <form method="post" class="card" style="margin-top:10px;">
+                      <input type="hidden" name="accion" value="editar" />
+                      <input type="hidden" name="id" value={u.id} />
+                      <label class="form-group">Nombre
+                        <input class="form-control" name="nombre" value={u.nombre} required maxlength="120" />
+                      </label>
+                      <label class="form-group">Rol
+                        <select class="form-control" name="rol">
+                          <option value="secretaria" selected={u.rol === "secretaria"}>Secretaría</option>
+                          <option value="admin" selected={u.rol === "admin"}>Administrador</option>
+                        </select>
+                      </label>
+                      <fieldset class="form-group juris-lista">
+                        <legend>Jurisdicciones (solo secretarías)</legend>
+                        {jurisdicciones.map((j) => (
+                          <label>
+                            <input type="checkbox" name="jurisdicciones" value={j.cod} checked={(u.jurisdicciones ?? "").split(",").includes(j.cod)} /> {j.cod} {j.denom}
+                          </label>
+                        ))}
+                      </fieldset>
+                      <div class="form-actions">
+                        <button class="btn btn-primary btn-sm" type="submit">Guardar</button>
+                      </div>
+                    </form>
+                  </details>
+                  <form method="post" class="confirmar" data-mensaje={`¿Borrar el usuario «${u.usuario}»?`}>
+                    <input type="hidden" name="accion" value="borrar" />
+                    <input type="hidden" name="id" value={u.id} />
+                    <button class="btn btn-secondary btn-sm" type="submit">Borrar</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <form method="post" class="card">
+    <input type="hidden" name="accion" value="crear" />
+    <div class="card-header">
+      <h2 class="card-title">Nuevo usuario</h2>
+    </div>
+    <div class="form-row">
+      <label class="form-group">Usuario
+        <input class="form-control" name="usuario" required maxlength="40" pattern="[a-z0-9][a-z0-9._\-]{1,39}" placeholder="ej. cultura" autocapitalize="none" />
+        <small>Minúsculas, sin espacios ni acentos.</small>
+      </label>
+      <label class="form-group">Nombre
+        <input class="form-control" name="nombre" required maxlength="120" placeholder="ej. Cultura y Deportes" />
+      </label>
+      <label class="form-group">Rol
+        <select class="form-control" name="rol">
+          <option value="secretaria">Secretaría</option>
+          <option value="admin">Administrador</option>
+        </select>
+      </label>
+      <label class="form-group">Contraseña
+        <input class="form-control" name="clave" type="text" minlength="8" maxlength="100" autocomplete="new-password" placeholder="Vacío = se genera una" />
+      </label>
+    </div>
+    <fieldset class="form-group juris-lista">
+      <legend>Jurisdicciones (solo secretarías)</legend>
+      {
+        jurisdicciones.map((j) => (
+          <label>
+            <input type="checkbox" name="jurisdicciones" value={j.cod} /> {j.cod} {j.denom}
+          </label>
+        ))
+      }
+    </fieldset>
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Crear usuario</button>
+    </div>
+  </form>
+</Base>
+
+<script>
+  document.querySelectorAll<HTMLFormElement>("form.confirmar").forEach((f) =>
+    f.addEventListener("submit", (e) => {
+      if (!confirm(f.dataset.mensaje ?? "¿Confirmás?")) e.preventDefault();
+    })
+  );
+</script>

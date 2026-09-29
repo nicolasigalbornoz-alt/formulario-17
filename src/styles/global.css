@@ -210,6 +210,17 @@ textarea {
   font-size: 12px;
   gap: 18px;
 }
+.municipal-account strong {
+  display: block;
+  font-size: 12px;
+  max-width: 220px;
+}
+.municipal-account small {
+  color: #bbb;
+  display: block;
+  font-size: 11px;
+  margin-top: 5px;
+}
 .header-button {
   background: transparent;
   border: 1px solid #777;
@@ -885,26 +896,66 @@ textarea.form-control {
   border-top: 2px solid #ddd;
   font-weight: 700;
 }
-.f17-input {
-  background: #f3f6fa;
-  border: 1px solid #c9d5e3;
-  border-radius: 2px;
+/* Switch "Por programa / Por categoría programática" */
+.modo-switch {
+  background: #f1f1f1;
+  border: 1px solid #ddd;
+  border-radius: 999px;
+  display: inline-flex;
+  padding: 4px;
+}
+.modo-switch label {
+  cursor: pointer;
+  position: relative;
+}
+.modo-switch input {
+  opacity: 0;
+  position: absolute;
+  inset: 0;
+}
+.modo-switch span {
+  border-radius: 999px;
+  color: #555;
+  display: block;
   font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  min-width: 118px;
-  padding: 6px 7px;
-  text-align: right;
-  width: 100%;
+  font-weight: 700;
+  padding: 9px 18px;
+  transition: background 0.15s, color 0.15s;
+  white-space: nowrap;
 }
-.f17-input:focus {
-  background: #fff;
-  border-color: var(--f17-programar);
-  outline: none;
+.modo-switch input:checked + span {
+  background: var(--moron-charcoal);
+  color: #fff;
 }
-tr.excedida .f17-input {
-  background: #fff;
-  border-color: #fff;
-  color: var(--moron-charcoal);
+.modo-switch input[value="categoria"]:checked + span {
+  background: var(--moron-red-dark);
+}
+.modo-switch input:focus-visible + span {
+  outline: 3px solid #d71922;
+  outline-offset: 2px;
+}
+.aviso-consolidar {
+  border-left: 4px solid #d99a1c;
+}
+.f17-table td.a-programar {
+  background: #eef3f9;
+}
+.f17-table tr.excedida td.a-programar {
+  background: #d65252;
+}
+.selection-count {
+  color: var(--moron-red-dark);
+  font: 700 20px "Neo Sans", sans-serif;
+  white-space: nowrap;
+}
+.form-carga {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+tr.fila-actual td {
+  background: #fff6f6;
 }
 .f17-notas {
   border-top: 1px solid #eee;
@@ -973,6 +1024,71 @@ tr.excedida .f17-input {
 .admin-nav a.active {
   border-color: var(--moron-red);
   color: var(--moron-red-dark);
+}
+
+/* Seguimiento y usuarios */
+.barra {
+  background: #eee;
+  border-radius: 3px;
+  height: 24px;
+  min-width: 150px;
+  overflow: hidden;
+  position: relative;
+}
+.barra i {
+  background: #9aa9bd;
+  display: block;
+  height: 100%;
+}
+.barra-ok i {
+  background: #6b9a6b;
+}
+.barra span {
+  font-size: 12px;
+  font-weight: 700;
+  left: 8px;
+  line-height: 24px;
+  position: absolute;
+  top: 0;
+}
+.table-actions {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.editar-usuario summary {
+  list-style: none;
+}
+.editar-usuario summary::-webkit-details-marker {
+  display: none;
+}
+.editar-usuario[open] {
+  flex-basis: 100%;
+}
+.juris-lista {
+  border: 1px solid #eee;
+  display: grid;
+  gap: 6px 18px;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  padding: 12px 14px;
+}
+.juris-lista legend {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 0 4px;
+}
+.juris-lista label {
+  font-weight: 400;
+}
+code.clave {
+  background: #fff6f6;
+  border: 1px solid #ead0d0;
+  font-size: 15px;
+  padding: 3px 8px;
+}
+.claves-nuevas {
+  border-top: 4px solid var(--moron-red);
 }
 
 /* ---------------------------------------------------------------- responsive */

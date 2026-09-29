@@ -1,0 +1,221 @@
+---
+import Base from "../../layouts/Base.astro";
+import AdminNav from "../../components/AdminNav.astro";
+import { d1, getCorte, trimestreAProgramar, fechaCorta, TRIMESTRE_ROMANO } from "../../lib/f17";
+import { estadoProgramas, fechaHoraAR, type EstadoPrograma } from "../../lib/seguimiento";
+
+const db = Astro.locals.runtime.env.DB;
+const sql = d1(db);
+const corte = await getCorte(sql);
+const T = corte ? trimestreAProgramar(corte) : null;
+const estado: EstadoPrograma[] = corte && T ? await estadoProgramas(sql, corte, T, null) : [];
+const filtro = Astro.url.searchParams.get("ver") ?? "todos"; // todos | pendientes
+
+// Usuarios de cada jurisdicción, para saber a quién reclamar.
+const asignados = await db
+  .prepare(
+    `SELECT j.jurisdiccion_codigo AS cod, group_concat(u.usuario, ', ') AS usuarios
+     FROM usuario_jurisdicciones j JOIN usuarios u ON u.id = j.usuario_id AND u.activo = 1
+     GROUP BY j.jurisdiccion_codigo`
+  )
+  .all<{ cod: string; usuarios: string }>();
+const usuariosDe = new Map((asignados.results ?? []).map((r) => [r.cod, r.usuarios]));
+
+const porJuris = [...new Set(estado.map((e) => e.jurisdiccion_codigo))].map((cod) => {
+  const programas = estado.filter((e) => e.jurisdiccion_codigo === cod);
+  return {
+    cod,
+    denom: programas[0].jurisdiccion,
+    programas,
+    descargados: programas.filter((p) => p.ultima_descarga).length,
+    cargados: programas.filter((p) => p.cargado_en).length,
+  };
+});
+const total = estado.length;
+const descargados = estado.filter((e) => e.ultima_descarga).length;
+const cargados = estado.filter((e) => e.cargado_en).length;
+const pct = (n: number, d: number) => (d ? Math.round((n / d) * 100) : 0);
+const volverAca = Astro.url.pathname + Astro.url.search;
+---
+
+<Base title="Seguimiento · Panel" active="admin">
+  <AdminNav active="seguimiento" />
+
+  {!T && <div class="alert alert-warning">{corte ? `El ejercicio ${corte.anio} está cerrado: no hay trimestre para programar.` : "Todavía no hay datos de RAFAM cargados."}</div>}
+
+  {
+    T && corte && (
+      <>
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <h2 class="card-title">
+                F17 del {TRIMESTRE_ROMANO[T - 1]} trimestre {corte.anio}
+              </h2>
+              <p class="card-intro">
+                Programas con crédito vigente al {fechaCorta(corte.hasta)}. «Descargado» = alguien de la secretaría bajó el Excel
+                del programa; «Cargado» = la secretaría marcó que ya lo cargó en RAFAM.
+              </p>
+            </div>
+            <div class="f17-acciones">
+              <a class:list={["btn", filtro === "todos" ? "btn-primary" : "btn-secondary"]} href="?ver=todos">Todos</a>
+              <a class:list={["btn", filtro === "pendientes" ? "btn-primary" : "btn-secondary"]} href="?ver=pendientes">Solo pendientes</a>
+            </div>
+          </div>
+          <dl class="dl-grid">
+            <div>
+              <dt>Programas</dt>
+              <dd>
+                {total}
+                <small>{porJuris.length} jurisdicciones</small>
+              </dd>
+            </div>
+            <div>
+              <dt>Excel descargado</dt>
+              <dd>
+                {descargados} <small>{pct(descargados, total)}% de los programas</small>
+              </dd>
+            </div>
+            <div>
+              <dt>Cargados en RAFAM</dt>
+              <dd>
+                {cargados} <small>{pct(cargados, total)}% de los programas</small>
+              </dd>
+            </div>
+            <div>
+              <dt>Pendientes</dt>
+              <dd>
+                {total - cargados} <small>sin marcar como cargados</small>
+              </dd>
+            </div>
+          </dl>
+        </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2 class="card-title">Avance por secretaría</h2>
+          </div>
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Jurisdicción</th>
+                  <th>Usuario(s)</th>
+                  <th class="num">Programas</th>
+                  <th>Descargados</th>
+                  <th>Cargados en RAFAM</th>
+                </tr>
+              </thead>
+              <tbody>
+                {porJuris.map((j) => (
+                  <tr>
+                    <td>
+                      <a href={`#j${j.cod}`}>
+                        {j.cod} · {j.denom}
+                      </a>
+                    </td>
+                    <td style="font-size:13px;">{usuariosDe.get(j.cod) ?? <span style="color:#b00;">sin usuario</span>}</td>
+                    <td class="num">{j.programas.length}</td>
+                    <td>
+                      <div class="barra" title={`${j.descargados} de ${j.programas.length}`}>
+                        <i style={`width:${pct(j.descargados, j.programas.length)}%`} />
+                        <span>
+                          {j.descargados} / {j.programas.length}
+                        </span>
+                      </div>
+                    </td>
+                    <td>
+                      <div class="barra barra-ok" title={`${j.cargados} de ${j.programas.length}`}>
+                        <i style={`width:${pct(j.cargados, j.programas.length)}%`} />
+                        <span>
+                          {j.cargados} / {j.programas.length}
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {porJuris.map((j) => {
+          const filas = filtro === "pendientes" ? j.programas.filter((p) => !p.cargado_en) : j.programas;
+          return filas.length === 0 ? null : (
+            <div class="card" id={`j${j.cod}`}>
+              <div class="card-header">
+                <h2 class="card-title">
+                  {j.cod} · {j.denom}
+                </h2>
+                <span class="selection-count">
+                  {j.cargados} de {j.programas.length} cargados
+                </span>
+              </div>
+              <div class="table-container">
+                <table class="table">
+                  <thead>
+                    <tr>
+                      <th>Programa</th>
+                      <th>Último Excel descargado</th>
+                      <th class="num">Descargas</th>
+                      <th>Cargado en RAFAM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filas.map((p) => (
+                      <tr>
+                        <td>
+                          <a href={`/formulario-17?jurisdiccion=${p.jurisdiccion_codigo}&programa=${p.programa_codigo}`}>
+                            <strong>{p.programa_codigo}</strong> · {p.programa}
+                          </a>
+                          {p.categorias > 1 && <small style="color:#777;"> ({p.categorias} categorías)</small>}
+                        </td>
+                        <td style="font-size:13px;">
+                          {p.ultima_descarga ? (
+                            <>
+                              {fechaHoraAR(p.ultima_descarga)} · {p.descargado_por}{" "}
+                              {p.modo_descarga === "categoria" && <span class="badge badge-warning">por categoría</span>}
+                              {p.modo_descarga === "completo" && <span class="badge badge-muted">programa completo</span>}
+                            </>
+                          ) : (
+                            <span style="color:#999;">Sin descargar</span>
+                          )}
+                        </td>
+                        <td class="num">{p.descargas}</td>
+                        <td>
+                          <form method="post" action="/api/f17/carga" class="form-carga">
+                            <input type="hidden" name="jurisdiccion" value={p.jurisdiccion_codigo} />
+                            <input type="hidden" name="programa" value={p.programa_codigo} />
+                            <input type="hidden" name="cargado" value={p.cargado_en ? "0" : "1"} />
+                            <input type="hidden" name="volver" value={volverAca} />
+                            {p.cargado_en ? (
+                              <>
+                                <span class="badge badge-success">
+                                  ✓ {fechaHoraAR(p.cargado_en)} · {p.cargado_por}
+                                </span>
+                                <button class="btn btn-secondary btn-sm" type="submit">
+                                  Desmarcar
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span class="badge badge-muted">Pendiente</span>
+                                <button class="btn btn-secondary btn-sm" type="submit">
+                                  Marcar
+                                </button>
+                              </>
+                            )}
+                          </form>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          );
+        })}
+      </>
+    )
+  }
+</Base>

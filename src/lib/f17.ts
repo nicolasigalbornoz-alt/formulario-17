@@ -153,6 +153,22 @@ export async function listCategorias(sql: Sql, corte: Corte, jurisdiccion: strin
   );
 }
 
+export interface CategoriaConPrograma extends CodDenom {
+  programa: CodDenom;
+}
+
+/** Todas las categorías programáticas de una jurisdicción, con su programa (carril "por categoría"). */
+export async function listCategoriasJurisdiccion(sql: Sql, corte: Corte, jurisdiccion: string): Promise<CategoriaConPrograma[]> {
+  const rows = await sql.all<{ cod: string; denom: string; programa_cod: string; programa_denom: string }>(
+    `SELECT catprog_codigo AS cod, MAX(catprog) AS denom, programa_codigo AS programa_cod, MAX(programa) AS programa_denom
+     FROM rafam_gastos WHERE anio = ? AND jurisdiccion_codigo = ? AND ${CON_MOVIMIENTO}
+     GROUP BY catprog_codigo, programa_codigo ORDER BY catprog_codigo`,
+    corte.anio,
+    jurisdiccion
+  );
+  return rows.map((r) => ({ cod: r.cod, denom: r.denom, programa: { cod: r.programa_cod, denom: r.programa_denom } }));
+}
+
 export async function listFuentes(
   sql: Sql,
   corte: Corte,

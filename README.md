@@ -21,21 +21,48 @@ login.
 
 - **Inicio**: accesos, calendarios de entrega (trimestrales y anuales, los
   mismos Google Calendar del Sites) y contacto.
-- **Formulario 17** (`/formulario-17`): el F17 prellenado. Los trimestres a
-  programar se pueden completar en pantalla (recalcula Disponible, Total
-  anual y marca en rojo las partidas excedidas, como la plantilla) y se
-  guardan en el navegador. Se descarga en Excel con el formato de la
-  plantilla: fórmulas de Disponible y Total anual y formato condicional
-  incluidos.
+- **Formulario 17** (`/formulario-17`, con usuario): el F17 prellenado, por
+  dos carriles separados que se eligen con un switch:
+  - **Por programa** (lo que se carga en RAFAM).
+  - **Por categoría programática**: avisa que hay que consolidarlo con las
+    demás categorías del programa antes de cargarlo (y el Excel lo repite
+    arriba de la hoja).
+
+  La página no guarda nada de lo que se programa: se descarga el Excel con
+  el formato de la plantilla (trimestres a programar vacíos, fórmulas de
+  Disponible y Total anual, formato condicional) y se completa ahí.
+  «Programa con todas sus categorías» baja un solo Excel con el total del
+  programa y cada categoría, para cada fuente.
 - **Instructivos** (`/instructivos`): PPP, F1, F4/F5, F7, F17 y Ejecutado de
   gastos, con los PDF de Drive y los videos de YouTube del Sites. Se editan
   en `src/lib/instructivos.ts`.
 - **Lista de difusión** (`/lista-de-difusion`): alta con los mismos datos que
   el formulario de Google (nombre, secretaría, cargo, programas, teléfono,
   mails) y baja.
-- **Panel** (`/admin`, con contraseña): suscriptos (baja/reactivar, CSV),
-  avisos masivos con historial, y estado de los datos de RAFAM con subida
-  manual de un reporte.
+- **Panel** (`/admin`, solo administradores): seguimiento del F17,
+  usuarios, suscriptos (baja/reactivar, CSV), avisos masivos con historial,
+  y estado de los datos de RAFAM con subida manual de un reporte.
+
+## Usuarios y seguimiento
+
+- **Administrador principal**: usuario `admin`, con la contraseña del secret
+  `ADMIN_PASSWORD_HASH` (sha-256; se cambia en Cloudflare). Ve todas las
+  jurisdicciones, el seguimiento y el panel. Desde el panel se pueden crear
+  otros administradores.
+- **Un usuario por secretaría** (la migración `0003` crea uno por cada
+  jurisdicción con presupuesto 2026, sin contraseña): solo ve y descarga el
+  F17 de sus jurisdicciones; el servidor rechaza cualquier otra. Las
+  contraseñas las genera el administrador en Panel → Usuarios («Generar
+  contraseñas para los … sin contraseña»): se muestran una sola vez, con un
+  CSV para repartirlas. Se guardan con PBKDF2; cambiar la contraseña o
+  desactivar el usuario cierra sus sesiones. 8 intentos fallidos en 15
+  minutos bloquean el usuario un rato.
+- **Seguimiento** (Panel → Seguimiento F17): para el trimestre que se está
+  programando, cada programa con crédito vigente muestra quién descargó el
+  Excel y cuándo (y si fue por categoría), y si la secretaría marcó que ya
+  lo cargó en RAFAM. Avance por secretaría con barras y filtro de
+  pendientes. Las secretarías marcan sus programas como cargados desde la
+  misma página del F17.
 
 ## Lógica del F17
 
@@ -101,6 +128,16 @@ Hay dos formas de cargar los datos:
   Windows después de la corrida diaria de RAFAMOR. Necesita credenciales de
   Cloudflare: `npx wrangler login` una vez, o la variable
   `CLOUDFLARE_API_TOKEN` con permiso de edición sobre D1.
+- **Descarga + carga diaria en una PC con RAFAM** (la que usa la
+  Subsecretaría): la tarea programada *F17 - Descargar RAFAM y sincronizar*
+  corre `scripts\rafam-diario.ps1` de lunes a viernes a las 07:45. Baja de
+  RAFAM los reportes mensuales de gastos con el bot de RAFAMOR
+  (`rafam_ejecutado_bg.py --periodo mes --tipo gastos`) y después corre la
+  sincronización. El usuario y la clave de RAFAM se cargan una vez con
+  `scripts\guardar-credencial-rafam.bat` (doble clic) y quedan cifrados con la
+  cuenta de Windows (`%APPDATA%\formulario-17\rafam-credencial.xml`). Log en
+  `logs\rafam-diario.log`. **El bot cierra cualquier Contabilidad.exe abierto
+  al arrancar.**
 - **Manual**, desde el panel → Datos de RAFAM: subir el `.xls` exportado de
   RAFAM (del día 1 al último día del mes, o hasta hoy). Se interpreta en el
   navegador y reemplaza la foto de ese mes.

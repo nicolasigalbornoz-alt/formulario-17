@@ -1,10 +1,12 @@
 ---
 interface Props {
-  active: "inicio" | "suscriptores" | "avisos" | "datos";
+  active: "inicio" | "seguimiento" | "usuarios" | "suscriptores" | "avisos" | "datos";
 }
 const { active } = Astro.props;
 const links = [
   { key: "inicio", href: "/admin", label: "Resumen" },
+  { key: "seguimiento", href: "/admin/seguimiento", label: "Seguimiento F17" },
+  { key: "usuarios", href: "/admin/usuarios", label: "Usuarios" },
   { key: "suscriptores", href: "/admin/suscriptores", label: "Suscriptos" },
   { key: "avisos", href: "/admin/avisos", label: "Avisos masivos" },
   { key: "datos", href: "/admin/datos", label: "Datos de RAFAM" },
@@ -16,7 +18,7 @@ const links = [
     <span class="eyebrow">Subsecretaría de Planificación Presupuestaria y Estadísticas</span>
     <h1>Panel administrativo</h1>
   </div>
-  <form method="post" action="/api/admin/logout">
+  <form method="post" action="/api/auth/salir">
     <button class="btn btn-secondary" type="submit">Salir <span aria-hidden="true">↗</span></button>
   </form>
 </div>

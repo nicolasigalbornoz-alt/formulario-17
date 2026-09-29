@@ -17,7 +17,7 @@ const fecha = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)
 const badge = (estado: string) => (estado === "enviado" ? "badge-success" : estado === "parcial" ? "badge-warning" : "badge-muted");
 ---
 
-<Base title="Avisos masivos · Panel">
+<Base title="Avisos masivos · Panel" active="admin">
   <AdminNav active="avisos" />
 
   {q.get("ok") && <div class:list={["alert", q.get("estado") === "enviado" ? "alert-success" : "alert-warning"]}>{q.get("msg")}</div>}

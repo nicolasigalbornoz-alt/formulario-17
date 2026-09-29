@@ -5,7 +5,7 @@ import {
   getCorte,
   listJurisdicciones,
   listProgramas,
-  listCategorias,
+  listCategoriasJurisdiccion,
   listFuentes,
   getDatosPrograma,
   armarF17,
@@ -14,78 +14,106 @@ import {
   trimestreDeMes,
   TRIMESTRE_ROMANO,
   type CodDenom,
+  type CategoriaConPrograma,
   type F17Reporte,
 } from "../lib/f17";
+import { puedeVer } from "../lib/auth";
+import { estadoProgramas, fechaHoraAR, type EstadoPrograma } from "../lib/seguimiento";
 
+const usuario = Astro.locals.usuario!;
 const sql = d1(Astro.locals.runtime.env.DB);
 const params = Astro.url.searchParams;
-const jurisdiccion = params.get("jurisdiccion") || "";
-const programa = params.get("programa") || "";
-const catprog = params.get("catprog") || "";
+
+// Dos carriles separados: por programa (lo que se carga en RAFAM) o por
+// categoría programática (hay que consolidarla después con las demás
+// categorías del programa).
+const modo = params.get("modo") === "categoria" ? "categoria" : "programa";
+let jurisdiccion = params.get("jurisdiccion") || "";
+let programa = modo === "programa" ? params.get("programa") || "" : "";
+const catprog = modo === "categoria" ? params.get("catprog") || "" : "";
 let fuente = params.get("fuente") || "";
 
 const corte = await getCorte(sql);
+const T = corte ? trimestreAProgramar(corte) : null;
 
 let jurisdicciones: CodDenom[] = [];
 let programas: CodDenom[] = [];
-let categorias: CodDenom[] = [];
+let categorias: CategoriaConPrograma[] = [];
 let fuentes: CodDenom[] = [];
 let reporte: F17Reporte | null = null;
+let otrasCategorias: CodDenom[] = [];
+let estado: EstadoPrograma[] = [];
+let sinPermiso = false;
 
 if (corte) {
-  jurisdicciones = await listJurisdicciones(sql, corte);
-  if (jurisdiccion) programas = await listProgramas(sql, corte, jurisdiccion);
+  jurisdicciones = (await listJurisdicciones(sql, corte)).filter((j) => puedeVer(usuario, j.cod));
+  if (jurisdiccion && !puedeVer(usuario, jurisdiccion)) {
+    sinPermiso = true;
+    jurisdiccion = "";
+  }
+  // Una secretaría con una sola jurisdicción no tiene que elegirla.
+  if (!jurisdiccion && jurisdicciones.length === 1) jurisdiccion = jurisdicciones[0].cod;
+
+  if (jurisdiccion) {
+    if (modo === "programa") programas = await listProgramas(sql, corte, jurisdiccion);
+    else categorias = await listCategoriasJurisdiccion(sql, corte, jurisdiccion);
+    if (T) estado = await estadoProgramas(sql, corte, T, [jurisdiccion]);
+  }
+  if (modo === "categoria" && catprog) {
+    const cat = categorias.find((c) => c.cod === catprog);
+    programa = cat?.programa.cod ?? "";
+  }
   if (jurisdiccion && programa) {
-    [categorias, fuentes] = await Promise.all([
-      listCategorias(sql, corte, jurisdiccion, programa),
-      listFuentes(sql, corte, jurisdiccion, programa, catprog || null),
-    ]);
+    fuentes = await listFuentes(sql, corte, jurisdiccion, programa, modo === "categoria" ? catprog : null);
     // Casi todos los programas tienen una sola fuente: se elige sola.
     if (!fuente && fuentes.length === 1) fuente = fuentes[0].cod;
     if (fuente && !fuentes.some((f) => f.cod === fuente)) fuente = "";
   }
   if (jurisdiccion && programa && fuente) {
     const datos = await getDatosPrograma(sql, corte, jurisdiccion, programa);
-    reporte = datos ? armarF17(datos, fuente, catprog || null) : null;
+    reporte = datos ? armarF17(datos, fuente, modo === "categoria" ? catprog : null) : null;
+    if (datos && modo === "categoria") otrasCategorias = datos.categorias.filter((c) => c.cod !== catprog);
   }
 }
 
-const T = corte ? trimestreAProgramar(corte) : null;
 const hayEnCurso = Boolean(corte && T && trimestreDeMes(corte.mes) === T);
 const pad2 = (n: number) => String(n).padStart(2, "0");
 const fmt = (n: number | null) =>
   n === null ? "" : n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-// Lo que necesita el script del navegador para recalcular y armar el Excel.
-const payload = reporte ? JSON.stringify(reporte) : "null";
+const categoriasPorPrograma = [...new Set(categorias.map((c) => c.programa.cod))].map((p) => ({
+  programa: categorias.find((c) => c.programa.cod === p)!.programa,
+  categorias: categorias.filter((c) => c.programa.cod === p),
+}));
+const volverAca = Astro.url.pathname + Astro.url.search;
 ---
 
-<Base title="Formulario 17" active="f17" description="Formulario 17 prellenado: programación financiera del compromiso por programa y categoría programática.">
+<Base title="Formulario 17" active="f17" description="Formulario 17 prellenado: programación financiera del compromiso por programa o categoría programática.">
   <div class="page-heading">
     <div>
       <span class="eyebrow">Programación financiera del compromiso</span>
       <h1>Formulario 17</h1>
       <p>
-        Elegí el programa (y, si querés, una categoría programática) para ver el F17 prellenado: las partidas con crédito
-        vigente, el compromiso del año anterior y lo comprometido en los trimestres ya ejecutados. Completá los trimestres a
-        programar y descargalo en Excel.
+        Elegí si lo sacás por programa o por categoría programática para ver el F17 prellenado: las partidas con crédito
+        vigente, el compromiso del año anterior y lo comprometido en los trimestres ya ejecutados. Descargalo en Excel y
+        completá ahí los trimestres a programar.
       </p>
     </div>
     <span class="page-heading-mark" aria-hidden="true">17</span>
   </div>
 
+  {sinPermiso && <div class="alert alert-error">Tu usuario no tiene acceso a esa jurisdicción.</div>}
   {
     !corte && (
       <div class="alert alert-warning">
-        Todavía no hay datos de ejecución cargados. La Subsecretaría los actualiza desde RAFAM; volvé a intentar
-        más tarde.
+        Todavía no hay datos de ejecución cargados. La Subsecretaría los actualiza desde RAFAM; volvé a intentar más tarde.
       </div>
     )
   }
+  {corte && jurisdicciones.length === 0 && <div class="alert alert-warning">Tu usuario todavía no tiene jurisdicciones asignadas. Pedíselo a la Subsecretaría.</div>}
 
   {
-    corte && (
-      <div class="card no-print">
+    corte && jurisdicciones.length > 0 && (
+      <form method="get" id="filtros" class="card no-print">
         <div class="card-header">
           <div>
             <h2 class="card-title">Elegí el formulario</h2>
@@ -94,12 +122,35 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
               {T ? <>se programa el <strong>{TRIMESTRE_ROMANO[T - 1]} trimestre</strong> de {corte.anio}</> : <>ejercicio {corte.anio} cerrado</>}
             </p>
           </div>
+          <fieldset class="modo-switch">
+            <legend class="sr-only">Sacar el F17 por</legend>
+            <label>
+              <input type="radio" name="modo" value="programa" checked={modo === "programa"} />
+              <span>Por programa</span>
+            </label>
+            <label>
+              <input type="radio" name="modo" value="categoria" checked={modo === "categoria"} />
+              <span>Por categoría programática</span>
+            </label>
+          </fieldset>
         </div>
-        <form method="get" id="filtros" class="search-bar">
+
+        {
+          modo === "categoria" && (
+            <div class="alert alert-warning aviso-consolidar" role="alert">
+              <strong>Ojo: el Formulario 17 se carga en RAFAM por programa.</strong> Si lo sacás por categoría programática, antes
+              de cargarlo tenés que consolidarlo con las demás categorías del mismo programa{otrasCategorias.length > 0
+                ? ` (${otrasCategorias.map((c) => c.cod).join(", ")})`
+                : ""}. Para tenerlas todas juntas usá «Programa con todas sus categorías».
+            </div>
+          )
+        }
+
+        <div class="search-bar">
           <label class="filter-field">
             <span>Jurisdicción</span>
             <select class="form-control" name="jurisdiccion" id="jurisdiccion" required>
-              <option value="">Elegir…</option>
+              {jurisdicciones.length > 1 && <option value="">Elegir…</option>}
               {jurisdicciones.map((j) => (
                 <option value={j.cod} selected={j.cod === jurisdiccion}>
                   {j.cod} - {j.denom}
@@ -107,30 +158,35 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
               ))}
             </select>
           </label>
-          <label class="filter-field">
-            <span>Programa</span>
-            <select class="form-control" name="programa" id="programa" required disabled={!jurisdiccion}>
-              <option value="">Elegir…</option>
-              {programas.map((p) => (
-                <option value={p.cod} selected={p.cod === programa}>
-                  {p.cod} - {p.denom}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label class="filter-field">
-            <span>
-              Categoría programática <small>(opcional)</small>
-            </span>
-            <select class="form-control" name="catprog" id="catprog" disabled={!programa}>
-              <option value="">Todas · total del programa</option>
-              {categorias.map((c) => (
-                <option value={c.cod} selected={c.cod === catprog}>
-                  {c.cod} - {c.denom}
-                </option>
-              ))}
-            </select>
-          </label>
+          {modo === "programa" ? (
+            <label class="filter-field">
+              <span>Programa</span>
+              <select class="form-control" name="programa" id="programa" required disabled={!jurisdiccion}>
+                <option value="">Elegir…</option>
+                {programas.map((p) => (
+                  <option value={p.cod} selected={p.cod === programa}>
+                    {p.cod} - {p.denom}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : (
+            <label class="filter-field" style="flex-grow:2;">
+              <span>Categoría programática</span>
+              <select class="form-control" name="catprog" id="catprog" required disabled={!jurisdiccion}>
+                <option value="">Elegir…</option>
+                {categoriasPorPrograma.map((g) => (
+                  <optgroup label={`Programa ${g.programa.cod} · ${g.programa.denom}`}>
+                    {g.categorias.map((c) => (
+                      <option value={c.cod} selected={c.cod === catprog}>
+                        {c.cod} - {c.denom}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
+              </select>
+            </label>
+          )}
           <label class="filter-field">
             <span>Fuente de financiamiento</span>
             <select class="form-control" name="fuente" id="fuente" required disabled={!programa}>
@@ -147,8 +203,8 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
               Ver formulario <span aria-hidden="true">→</span>
             </button>
           </div>
-        </form>
-      </div>
+        </div>
+      </form>
     )
   }
 
@@ -160,11 +216,12 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
 
   {
     reporte && (
-      <section class="card f17-resumen" id="f17" data-reporte={payload}>
+      <section class="card f17-resumen" id="f17" data-reporte={JSON.stringify(reporte)} data-modo={modo} data-otras={otrasCategorias.map((c) => c.cod).join(",")}>
         <div class="card-header">
           <div class="f17-titulo">
             <span class="eyebrow">
-              Jurisdicción {reporte.jurisdiccion.cod} · {reporte.jurisdiccion.denom}
+              {modo === "categoria" ? "Por categoría programática" : "Por programa"} · Jurisdicción {reporte.jurisdiccion.cod} ·{" "}
+              {reporte.jurisdiccion.denom}
             </span>
             <h2>
               {reporte.catprog
@@ -188,7 +245,7 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
               data-programa={reporte.programa.cod}
               title="Un Excel con el total del programa y una hoja por categoría programática, para cada fuente"
             >
-              Programa completo <span aria-hidden="true">↓</span>
+              Programa con todas sus categorías <span aria-hidden="true">↓</span>
             </button>
             <button class="btn btn-secondary" type="button" onclick="window.print()">
               Imprimir
@@ -217,12 +274,12 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
 
         <div class="f17-leyenda">
           <span><i style="background:var(--f17-ejecutado)"></i>Trimestre ejecutado</span>
-          {reporte.trimestre && <span><i style="background:var(--f17-programar)"></i>Trimestre a programar (editable)</span>}
+          {reporte.trimestre && <span><i style="background:var(--f17-programar)"></i>Trimestre a programar (se completa en el Excel)</span>}
           <span><i style="background:var(--f17-excedida)"></i>Partida excedida: el total anual supera al crédito vigente</span>
         </div>
 
         <div class="table-container">
-          <table class="table f17-table" id="f17-tabla">
+          <table class="table f17-table">
             <thead>
               <tr>
                 <th class="t-oscuro">Fte.</th>
@@ -233,41 +290,25 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
                 <th class="t-oscuro">Crédito vigente</th>
                 {hayEnCurso && <th title="Informativo: lo comprometido en el trimestre que se programa, hasta la fecha de corte">Ya comprometido trim. {pad2(T!)} al {fechaCorta(reporte.corte.hasta).slice(0, 5)}</th>}
                 {[1, 2, 3, 4].map((t) => (
-                  <th class={reporte.trimestre !== null && t >= reporte.trimestre ? "t-programar" : "t-ejecutado"}>
-                    Trimestre {TRIMESTRE_ROMANO[t - 1]}
-                  </th>
+                  <th class={reporte.trimestre !== null && t >= reporte.trimestre ? "t-programar" : "t-ejecutado"}>Trimestre {TRIMESTRE_ROMANO[t - 1]}</th>
                 ))}
                 <th class="t-oscuro">Disponible{reporte.trimestre ? ` (al trim. ${pad2(reporte.trimestre)})` : ""}</th>
                 <th class="t-oscuro">Total anual</th>
               </tr>
             </thead>
             <tbody>
-              {reporte.filas.map((f, i) => (
-                <tr class:list={{ excedida: f.excedida }} data-fila={i}>
+              {reporte.filas.map((f) => (
+                <tr class:list={{ excedida: f.excedida }}>
                   <td class="num">{f.fuenteCod}</td>
                   <td class="partida">{f.partidaCod}</td>
                   <td class="denominacion">{f.partidaDenom}</td>
                   <td class="num">{fmt(f.compromisoAnioAnterior)}</td>
                   <td class="num">{fmt(f.igualTrimestreAnioAnterior)}</td>
-                  <td class="num" data-vigente={f.creditoVigente}>{fmt(f.creditoVigente)}</td>
+                  <td class="num">{fmt(f.creditoVigente)}</td>
                   {hayEnCurso && <td class="num info">{fmt(f.enCurso)}</td>}
-                  {f.trimestres.map((v, t) =>
-                    v === null ? (
-                      <td class="num">
-                        <input
-                          class="f17-input"
-                          inputmode="decimal"
-                          autocomplete="off"
-                          aria-label={`Trimestre ${TRIMESTRE_ROMANO[t]} · partida ${f.partidaCod}`}
-                          data-trim={t}
-                        />
-                      </td>
-                    ) : (
-                      <td class="num">{fmt(v)}</td>
-                    )
-                  )}
-                  <td class="num" data-disponible>{fmt(f.disponible)}</td>
-                  <td class="num" data-total>{fmt(f.totalAnual)}</td>
+                  {f.trimestres.map((v) => (v === null ? <td class="a-programar" /> : <td class="num">{fmt(v)}</td>))}
+                  <td class="num">{fmt(f.disponible)}</td>
+                  <td class="num">{fmt(f.totalAnual)}</td>
                 </tr>
               ))}
             </tbody>
@@ -278,11 +319,9 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
                 <td class="num">{fmt(reporte.totales.igualTrimestreAnioAnterior)}</td>
                 <td class="num">{fmt(reporte.totales.creditoVigente)}</td>
                 {hayEnCurso && <td class="num info">{fmt(reporte.totales.enCurso)}</td>}
-                {reporte.totales.trimestres.map((v, t) => (
-                  <td class="num" data-total-trim={t}>{fmt(v ?? 0)}</td>
-                ))}
-                <td class="num" data-total-disponible>{fmt(reporte.totales.disponible)}</td>
-                <td class="num" data-total-anual>{fmt(reporte.totales.totalAnual)}</td>
+                {reporte.totales.trimestres.map((v) => (v === null ? <td class="a-programar" /> : <td class="num">{fmt(v)}</td>))}
+                <td class="num">{fmt(reporte.totales.disponible)}</td>
+                <td class="num">{fmt(reporte.totales.totalAnual)}</td>
               </tr>
             </tfoot>
           </table>
@@ -291,9 +330,8 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
         <div class="f17-notas">
           <ul>
             <li>
-              <strong>El Excel no reemplaza la carga en RAFAM.</strong> Es una plantilla prellenada para ahorrar trabajo: distribuí
-              las partidas en los trimestres a programar según el <a href="/instructivos/f17">instructivo</a> y después hacé la
-              carga manual en RAFAM.
+              <strong>La página no guarda nada de lo que programes.</strong> Descargá el Excel, completá ahí los trimestres a
+              programar según el <a href="/instructivos/f17">instructivo</a> y después hacé la carga en RAFAM.
             </li>
             <li>
               Las partidas en rojo tienen crédito disponible negativo (el total anual supera al crédito vigente) y no se cargan en
@@ -304,10 +342,78 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
               de cada trimestre ejecutado es la suma de lo comprometido en sus tres meses.
             </li>
             <li>
-              Si el programa tiene crédito en más de una fuente de financiamiento hay un formulario por fuente. «Programa completo»
-              baja un solo Excel con todas las fuentes, el total del programa y cada categoría programática.
+              Si el programa tiene crédito en más de una fuente de financiamiento hay un formulario por fuente. «Programa con
+              todas sus categorías» baja un solo Excel con todas las fuentes, el total del programa y cada categoría.
             </li>
           </ul>
+        </div>
+      </section>
+    )
+  }
+
+  {
+    T && jurisdiccion && estado.length > 0 && (
+      <section class="card no-print" id="seguimiento">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">
+              Programas de {jurisdicciones.find((j) => j.cod === jurisdiccion)?.denom} · {TRIMESTRE_ROMANO[T - 1]} trimestre {corte!.anio}
+            </h2>
+            <p class="card-intro">
+              Cuando termines de cargar el F17 de un programa en RAFAM, marcalo acá: la Subsecretaría sigue el avance con esta
+              lista.
+            </p>
+          </div>
+          <span class="selection-count">
+            {estado.filter((e) => e.cargado_en).length} de {estado.length} cargados
+          </span>
+        </div>
+        <div class="table-container">
+          <table class="table">
+            <thead>
+              <tr>
+                <th>Programa</th>
+                <th>Último Excel descargado</th>
+                <th>Cargado en RAFAM</th>
+              </tr>
+            </thead>
+            <tbody>
+              {estado.map((e) => (
+                <tr class:list={{ "fila-actual": e.programa_codigo === programa }}>
+                  <td>
+                    <strong>{e.programa_codigo}</strong> · {e.programa}
+                    {e.categorias > 1 && <small style="color:#777;"> ({e.categorias} categorías)</small>}
+                  </td>
+                  <td style="font-size:13px;">
+                    {e.ultima_descarga ? (
+                      <>
+                        {fechaHoraAR(e.ultima_descarga)} · {e.descargado_por}{" "}
+                        {e.modo_descarga === "categoria" && <span class="badge badge-warning">por categoría</span>}
+                      </>
+                    ) : (
+                      <span style="color:#999;">Sin descargar</span>
+                    )}
+                  </td>
+                  <td>
+                    <form method="post" action="/api/f17/carga" class="form-carga">
+                      <input type="hidden" name="jurisdiccion" value={e.jurisdiccion_codigo} />
+                      <input type="hidden" name="programa" value={e.programa_codigo} />
+                      <input type="hidden" name="cargado" value={e.cargado_en ? "0" : "1"} />
+                      <input type="hidden" name="volver" value={volverAca} />
+                      {e.cargado_en ? (
+                        <>
+                          <span class="badge badge-success">✓ {fechaHoraAR(e.cargado_en)} · {e.cargado_por}</span>
+                          <button class="btn btn-secondary btn-sm" type="submit">Desmarcar</button>
+                        </>
+                      ) : (
+                        <button class="btn btn-secondary btn-sm" type="submit">Marcar como cargado</button>
+                      )}
+                    </form>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
     )
@@ -315,7 +421,7 @@ const payload = reporte ? JSON.stringify(reporte) : "null";
 </Base>
 
 <script>
-  import { iniciarFiltros, iniciarFormulario } from "../scripts/f17-page";
+  import { iniciarFiltros, iniciarDescargas } from "../scripts/f17-page";
   iniciarFiltros();
-  iniciarFormulario();
+  iniciarDescargas();
 </script>

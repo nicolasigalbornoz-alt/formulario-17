@@ -5,6 +5,7 @@ interface Props {
   active?: string;
 }
 const { active } = Astro.props;
+const usuario = Astro.locals.usuario;
 ---
 
 <header class="municipal-header">
@@ -24,9 +25,28 @@ const { active } = Astro.props;
       </div>
       <a href="/#calendario" class:list={{ active: active === "calendario" }}>Calendario</a>
       <a href="/lista-de-difusion" class:list={{ active: active === "mailing" }}>Lista de difusión</a>
+      {usuario?.rol === "admin" && <a href="/admin" class:list={{ active: active === "admin" }}>Panel</a>}
     </nav>
     <div class="municipal-account">
-      <a class="header-button" href="/admin">Panel<span aria-hidden="true">↗</span></a>
+      {
+        usuario ? (
+          <>
+            <div>
+              <strong>{usuario.nombre}</strong>
+              <small>{usuario.rol === "admin" ? "Administrador" : "Secretaría"} · {usuario.usuario}</small>
+            </div>
+            <form method="post" action="/api/auth/salir">
+              <button class="header-button" type="submit">
+                Salir<span aria-hidden="true">↗</span>
+              </button>
+            </form>
+          </>
+        ) : (
+          <a class="header-button" href="/ingresar">
+            Ingresar<span aria-hidden="true">↗</span>
+          </a>
+        )
+      }
     </div>
   </div>
 </header>
