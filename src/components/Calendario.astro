@@ -1,0 +1,121 @@
+---
+// Calendario de entregas propio (reemplaza a los Google Calendar del Sites).
+// Muestra tres meses a partir de ?mes=AAAA-MM (por defecto el actual), con los
+// plazos y vencimientos que carga el administrador en Panel -> Avisos y fechas.
+import { vencimientosEntre, hoyAR, TIPOS_VENCIMIENTO, type Vencimiento } from "../lib/novedades";
+
+const db = Astro.locals.runtime.env.DB;
+const hoy = hoyAR();
+const pedido = Astro.url.searchParams.get("mes");
+const inicio = /^\d{4}-\d{2}$/.test(pedido ?? "") ? `${pedido}-01` : `${hoy.slice(0, 7)}-01`;
+
+const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const iso = (d: Date) => d.toISOString().slice(0, 10);
+const sumarMeses = (base: string, n: number) => {
+  const d = new Date(`${base}T00:00:00Z`);
+  d.setUTCMonth(d.getUTCMonth() + n, 1);
+  return iso(d);
+};
+const meses = [0, 1, 2].map((n) => sumarMeses(inicio, n));
+const fin = iso(new Date(Date.parse(`${sumarMeses(inicio, 3)}T00:00:00Z`) - 86_400_000));
+const vencimientos = await vencimientosEntre(db, inicio, fin);
+
+/** Vencimientos que tocan un día (dentro de su plazo o el día que vencen). */
+const delDia = (dia: string): Vencimiento[] => vencimientos.filter((v) => (v.desde ?? v.fecha) <= dia && dia <= v.fecha);
+const semanas = (primero: string) => {
+  const d0 = new Date(`${primero}T00:00:00Z`);
+  const offset = (d0.getUTCDay() + 6) % 7; // lunes = 0
+  const dias: (string | null)[] = Array(offset).fill(null);
+  const d = new Date(d0);
+  while (d.getUTCMonth() === d0.getUTCMonth()) {
+    dias.push(iso(d));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  while (dias.length % 7) dias.push(null);
+  return Array.from({ length: dias.length / 7 }, (_, i) => dias.slice(i * 7, i * 7 + 7));
+};
+const dm = (s: string) => `${s.slice(8, 10)}/${s.slice(5, 7)}`;
+const anterior = sumarMeses(inicio, -3).slice(0, 7);
+const siguiente = sumarMeses(inicio, 3).slice(0, 7);
+---
+
+<section class="consultation-section" id="calendario" style="padding-top:0;">
+  <div class="section-heading">
+    <span class="eyebrow">Calendario de presentaciones</span>
+    <h2>Fechas de entrega</h2>
+    <span class="heading-rule"></span>
+  </div>
+
+  <div class="calendario-barra">
+    <a class="btn btn-secondary btn-sm" href={`?mes=${anterior}#calendario`}>← Anteriores</a>
+    <div class="calendario-leyenda">
+      {TIPOS_VENCIMIENTO.map((t) => <span><i class={`tipo-${t.valor}`}></i>{t.label}</span>)}
+      <span><i class="dia-vence"></i>Vence</span>
+    </div>
+    <a class="btn btn-secondary btn-sm" href={`?mes=${siguiente}#calendario`}>Siguientes →</a>
+  </div>
+
+  <div class="calendario-grid">
+    {
+      meses.map((m) => (
+        <div class="calendario-mes">
+          <h3>
+            {MESES[Number(m.slice(5, 7)) - 1]} {m.slice(0, 4)}
+          </h3>
+          <table>
+            <thead>
+              <tr>
+                {["L", "M", "M", "J", "V", "S", "D"].map((d) => (
+                  <th>{d}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {semanas(m).map((semana) => (
+                <tr>
+                  {semana.map((dia) => {
+                    if (!dia) return <td />;
+                    const vs = delDia(dia);
+                    // El día que vence algo lleva el color de lo que vence; si se
+                    // superponen plazos de distinto tipo, se muestran los dos colores.
+                    const tipoVence = vs.find((v) => v.fecha === dia)?.tipo;
+                    const tipos = [...new Set(vs.map((v) => v.tipo))];
+                    const tipo = tipoVence ?? tipos[0];
+                    const mezcla = !tipoVence && tipos.length > 1;
+                    return (
+                      <td
+                        class:list={[{ hoy: dia === hoy, vence: !!tipoVence, "en-plazo": vs.length > 0 }, tipo && `tipo-${tipo}`]}
+                        style={mezcla ? `background:linear-gradient(135deg, var(--tipo-${tipos[0]}-claro) 50%, var(--tipo-${tipos[1]}-claro) 50%)` : undefined}
+                        title={vs.map((v) => `${v.titulo}${v.fecha === dia ? " (vence)" : ""}`).join("\n") || undefined}
+                      >
+                        {Number(dia.slice(8, 10))}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))
+    }
+  </div>
+
+  <div class="card calendario-lista">
+    {
+      vencimientos.length === 0 ? (
+        <p class="card-intro">No hay fechas cargadas en estos meses.</p>
+      ) : (
+        <ul>
+          {vencimientos.map((v) => (
+            <li class:list={{ pasado: v.fecha < hoy }}>
+              <span class:list={["tipo-chip", `tipo-${v.tipo}`]}>{TIPOS_VENCIMIENTO.find((t) => t.valor === v.tipo)?.label}</span>
+              <strong>{v.desde && v.desde !== v.fecha ? `Del ${dm(v.desde)} al ${dm(v.fecha)}` : `Vence el ${dm(v.fecha)}`}</strong> · {v.titulo}
+              {v.descripcion && <small>{v.descripcion}</small>}
+            </li>
+          ))}
+        </ul>
+      )
+    }
+  </div>
+</section>

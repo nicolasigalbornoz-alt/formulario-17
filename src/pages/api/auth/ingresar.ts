@@ -15,6 +15,6 @@ export const POST: APIRoute = async ({ request, locals, redirect, cookies }) => 
     return redirect(`/ingresar?${qs}`, 303);
   }
   cookies.set(SESSION_COOKIE, r.cookie, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: SESSION_MAX_AGE_S });
-  const destino = volver && !(volver.startsWith("/admin") && r.usuario.rol !== "admin") ? volver : r.usuario.rol === "admin" ? "/admin" : "/formulario-17";
+  const destino = volver && !(volver.startsWith("/admin") && r.usuario.rol !== "admin") ? volver : "/";
   return redirect(destino, 303);
 };

@@ -1,0 +1,104 @@
+---
+import Base from "../../layouts/Base.astro";
+import F17Nav from "../../components/F17Nav.astro";
+import { d1, getCorte } from "../../lib/f17";
+
+// Unificar los F17 por categoría programática de un programa en un solo F17
+// por programa (lo que se carga en RAFAM). Los Excel se leen y se suman en el
+// navegador: no se suben ni se guardan en el sitio. Del servidor salen el
+// catálogo de programas y categorías del área (para avisar si falta alguna
+// categoría) y, al descargar, las columnas prellenadas del programa.
+const usuario = Astro.locals.usuario!;
+const sql = d1(Astro.locals.runtime.env.DB);
+const corte = await getCorte(sql);
+
+type Catalogo = Record<string, { denom: string; programas: Record<string, { denom: string; categorias: Record<string, { denom: string; fuentes: string[] }> }> }>;
+const catalogo: Catalogo = {};
+if (corte) {
+  const filtro = usuario.jurisdicciones ? `AND jurisdiccion_codigo IN (${usuario.jurisdicciones.map(() => "?").join(",") || "''"})` : "";
+  const filas = await sql.all<{ j: string; jd: string; p: string; pd: string; c: string; cd: string; f: string }>(
+    `SELECT jurisdiccion_codigo AS j, MAX(jurisdiccion) AS jd, programa_codigo AS p, MAX(programa) AS pd,
+            catprog_codigo AS c, MAX(catprog) AS cd, fuente_codigo AS f
+     FROM rafam_gastos WHERE anio = ? AND (vigente <> 0 OR compromiso <> 0) ${filtro}
+     GROUP BY jurisdiccion_codigo, programa_codigo, catprog_codigo, fuente_codigo`,
+    corte.anio,
+    ...(usuario.jurisdicciones ?? [])
+  );
+  for (const r of filas) {
+    const j = (catalogo[r.j] ??= { denom: r.jd, programas: {} });
+    const p = (j.programas[r.p] ??= { denom: r.pd, categorias: {} });
+    const c = (p.categorias[r.c] ??= { denom: r.cd, fuentes: [] });
+    c.fuentes.push(r.f);
+  }
+}
+---
+
+<Base title="Unificar categorías · Formulario 17" active="f17">
+  <F17Nav
+    active="unificar"
+    texto="Si sacaste el F17 por categoría programática, cargá acá los Excel ya completos de todas las categorías del programa y descargá un solo F17 por programa, con el mismo formato, para cargarlo en RAFAM."
+  />
+
+  <section class="card" id="unificador" data-catalogo={JSON.stringify(catalogo)}>
+    <div class="card-header">
+      <div>
+        <h2 class="card-title">Excel de las categorías</h2>
+        <p class="card-intro">
+          Tienen que ser los F17 descargados de este sitio por categoría programática, del mismo programa, fuente y trimestre.
+          <strong>Se procesan en tu navegador: no se suben ni se guardan en el sitio.</strong>
+        </p>
+      </div>
+    </div>
+
+    <label class="dropzone" id="zona">
+      <input type="file" id="archivos" accept=".xlsx" multiple />
+      <strong>Elegí o arrastrá los Excel</strong>
+      <span>Uno por categoría (.xlsx). Podés sumar más después.</span>
+    </label>
+
+    <div id="mensajes"></div>
+
+    <div id="resultado" hidden>
+      <div class="table-container">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Categoría</th>
+              <th>Archivo</th>
+              <th class="num">Partidas</th>
+              <th class="num">Programado en el Excel</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lista"></tbody>
+        </table>
+      </div>
+      <div class="form-actions" style="justify-content:space-between; align-items:center;">
+        <p class="card-intro" id="resumen"></p>
+        <div class="f17-acciones">
+          <button class="btn btn-secondary" type="button" id="limpiar">Empezar de nuevo</button>
+          <button class="btn btn-primary" type="button" id="descargar-unificado" disabled>
+            Descargar F17 del programa <span aria-hidden="true">↓</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="card f17-notas">
+    <ul>
+      <li>
+        Lo que programaste en cada Excel (los trimestres a cargar) se suma partida por partida. Las demás columnas —compromiso del año
+        anterior, igual trimestre, crédito vigente, trimestres ejecutados y disponible— son las del F17 por programa con los últimos datos de
+        RAFAM, así que incluyen también las categorías que este año no tienen crédito.
+      </li>
+      <li>El Excel unificado tiene el formato del F17 por programa: las columnas y el total anual siguen siendo editables.</li>
+      <li>Si falta alguna categoría del programa, te avisa antes de descargar.</li>
+    </ul>
+  </div>
+</Base>
+
+<script>
+  import { iniciarUnificador } from "../../scripts/unificar";
+  iniciarUnificador();
+</script>

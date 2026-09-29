@@ -10,8 +10,9 @@ página. También reemplaza lo que había detrás:
 | Planillas "registros f17/programa" y "registros f17/categoría" (hojas `basevig`, `añoant`, `vigente`) cargadas a mano cada trimestre | Base SQL (Cloudflare D1) con la ejecución de gastos de RAFAM, la misma que baja a diario el pipeline de **RAFAMOR** |
 | AppScript que generaba un Excel por programa, fuente y trimestre | El F17 se arma al momento; el Excel es solo una opción de descarga |
 | Tablero de Looker Studio para buscar el archivo | Filtros jurisdicción → programa → categoría (opcional) → fuente |
-| Macro `.xlsm` que sumaba los F17 de cada categoría | Botón «Programa completo»: un Excel con el total del programa y una hoja por categoría, para cada fuente |
+| Macro `.xlsm` que sumaba los F17 de cada categoría | «Unificar categorías»: se suben los Excel completos de cada categoría y devuelve uno solo del programa, con el mismo formato |
 | Formulario de Google "inscripción" | Lista de difusión propia, con panel para exportar CSV y mandar avisos |
+| Google Calendar embebidos en el Sites | Calendario propio con las fechas que carga el administrador (y alertas por mail) |
 
 El sitio usa la estética del sistema interno de Gestión Documental del
 Municipio (sde_v2): paleta, tipografías Neo Sans, header, hero, tarjetas y
@@ -19,18 +20,37 @@ login.
 
 ## Qué hay en el sitio
 
-- **Inicio**: accesos, calendarios de entrega (trimestrales y anuales, los
-  mismos Google Calendar del Sites) y contacto.
-- **Formulario 17** (`/formulario-17`, con usuario): el F17 prellenado.
-  - **Trimestre a cargar**: se elige, pero solo entre los que tienen
-    cerrados todos los trimestres anteriores del año (sus tres meses
-    cargados completos desde RAFAM). Por defecto, el último disponible.
-  - Dos carriles con un switch: **por programa** (lo que se carga en RAFAM)
-    o **por categoría programática**, que avisa que hay que consolidarlo con
-    las demás categorías del programa (y el Excel lo repite arriba).
-  - La página no guarda nada de lo que se programa: un solo botón descarga
-    el Excel con el formato de la plantilla (trimestres a programar vacíos,
-    fórmulas de Disponible y Total anual, formato condicional).
+Todo el sitio está detrás del inicio de sesión: cualquier página sin sesión
+lleva a `/ingresar` (y después de ingresar vuelve a la que se pidió), y
+«Salir» vuelve al inicio de sesión. Solo quedan abiertos el ingreso, la baja
+de la lista de difusión (el enlace de los mails) y la tarea programada de
+alertas.
+
+- **Inicio**: accesos, avisos, el calendario de entregas y contacto. El
+  calendario es propio (reemplaza a los Google Calendar del Sites): tres
+  meses con los plazos y vencimientos que carga el administrador, en colores
+  por tipo (formularios trimestrales, anuales, otros).
+- **Formulario 17** (`/formulario-17`), en tres pestañas:
+  - **Descargar prellenado**: se elige jurisdicción, programa, fuente y
+    trimestre, y el formulario aparece recién con «Ver formulario».
+    - **Trimestre a cargar**: solo entre los que tienen cerrados todos los
+      trimestres anteriores del año (sus tres meses cargados completos desde
+      RAFAM). Por defecto, el último disponible.
+    - Dos carriles con un switch: **por programa** (lo que se carga en
+      RAFAM) o **por categoría programática**, que avisa que hay que
+      consolidarla con las demás categorías del programa (el Excel lo repite
+      arriba).
+    - La página no guarda nada de lo que se programa: un solo botón descarga
+      el Excel con el formato de la plantilla (trimestres a programar vacíos,
+      fórmula de Total anual, formato condicional).
+  - **Unificar categorías** (`/formulario-17/unificar`): se suben los Excel
+    ya completos de cada categoría de un programa y devuelve un solo Excel
+    del programa, con el mismo formato, listo para cargar en RAFAM. Controla
+    que sean de la misma jurisdicción, programa, fuente y trimestre, que no
+    haya categorías repetidas y avisa si falta alguna. Los archivos se leen
+    en el navegador: no se suben ni se guardan.
+  - **Avance de carga** (`/formulario-17/avance`): por trimestre, qué
+    programas ya se cargaron en RAFAM; cada secretaría marca los suyos.
 - **Instructivos** (`/instructivos`): PPP, F1, F4/F5, F7, F17 y Ejecutado de
   gastos, con los PDF de Drive y los videos de YouTube del Sites. Se editan
   en `src/lib/instructivos.ts`.
@@ -46,7 +66,10 @@ login.
 Panel → Avisos y fechas:
 
 - **Fechas de vencimiento** (ej. «Presentación F17 del IV trimestre»): se
-  muestran en el inicio y arriba del F17. Cada una manda alertas por mail a
+  muestran en el calendario del inicio y arriba del F17. Pueden ser un plazo
+  («desde» opcional → «vence») y tienen un tipo (formularios trimestrales,
+  anuales u otros) que les da el color en el calendario. La migración `0005`
+  trae las fechas que estaban en los Google Calendar del Sites. Cada una manda alertas por mail a
   la lista de difusión: unos días antes (0 a 15, se elige) y el mismo día.
   Las manda una tarea programada del Worker todos los días a las 8:00
   (`[triggers]` en `wrangler.toml`, `worker/index.mjs` →
@@ -78,8 +101,8 @@ mails no salen (ver «Envío de mails»).
   programando, cada programa con crédito vigente muestra quién descargó el
   Excel y cuándo (y si fue por categoría), y si la secretaría marcó que ya
   lo cargó en RAFAM. Avance por secretaría con barras y filtro de
-  pendientes. Las secretarías marcan sus programas como cargados desde la
-  misma página del F17.
+  pendientes. Las secretarías marcan sus programas como cargados en
+  Formulario 17 → Avance de carga.
 
 ## Lógica del F17
 
@@ -95,10 +118,16 @@ partida:
 | Igual trimestre año anterior | `añoant`, trimestre D5 | compromiso del año anterior en el trimestre D5 |
 | **Crédito vigente** | `vigente` al cierre del trimestre anterior | **vigente al último día con información** (pedido de la Subsecretaría) |
 | Trimestres I–IV | compromiso de cada trimestre < D5 | ídem, sumando los meses de cada trimestre |
-| Disponible / Total anual | `G − M` / `SUM(H:K)` | ídem (también como fórmulas en el Excel) |
-| Rojo | `M > G` | ídem |
+| **Disponible** | `G − M` | **el disponible de RAFAM al último dato**: vigente − preventivo − compromiso acumulados del año (el mismo cálculo del reporte de RAFAM) |
+| Total anual | `SUM(H:K)` | ídem (fórmula en el Excel) |
+| Rojo | `M > G` | disponible negativo o total anual mayor al vigente |
 
 Sin categoría elegida, el programa es la suma de todas sus categorías.
+
+El F17 anticipa la ejecución: el trimestre que se carga y los siguientes van
+vacíos para programarlos, y no se muestra nada del compromiso de esos
+trimestres (ya no está la columna «Ya comprometido»). Lo que ya se reservó o
+comprometió en el año está dentro del disponible.
 
 **Validación** contra las planillas (corte simulado al 31/03/2026, que es
 lo que la planilla usaba para el II trimestre): el crédito vigente coincide
@@ -218,16 +247,22 @@ scripts/sync-rafamor.mjs    RAFAMOR (.xls de RAFAM) -> D1
 scripts/mail_apps_script.gs Web App de Google para mandar los avisos
 src/lib/rafam-gastos.mjs    parser del reporte de gastos de RAFAM (Node, Worker y navegador)
 src/lib/f17.ts              lógica del F17
+src/lib/novedades.ts        avisos, fechas del calendario y alertas por mail
+src/components/Calendario.astro  calendario de entregas del inicio
 src/lib/instructivos.ts     contenido de Instructivos
 src/lib/mailing.ts          lista de difusión
 src/lib/mail-sender.ts      envío de avisos
-src/scripts/                JS del navegador (F17 editable, Excel, subida de reportes)
+src/scripts/                JS del navegador (filtros y Excel del F17, unificador, subida de reportes)
 src/pages/                  páginas y API
 public/                     logo, foto y tipografías institucionales
 ```
 
 ## Pendiente
 
+- Los accesos directos o marcadores creados con el nombre anterior
+  («…Estadísticas») guardan ese nombre en la PC de cada uno: hay que
+  borrarlos y volver a crearlos desde el sitio (el sitio ya se publica como
+  «Subsecretaría de Planificación Presupuestaria y Estadística»).
 - Definir y configurar el proveedor de mail (ver "Envío de mails").
 - Programar `scripts\sync-rafamor.bat` en la PC de RAFAMOR.
 - Pasar los suscriptos actuales del formulario de Google: exportar sus

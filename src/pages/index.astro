@@ -2,39 +2,7 @@
 import Base from "../layouts/Base.astro";
 import { d1, getCorte, fechaCorta } from "../lib/f17";
 import Novedades from "../components/Novedades.astro";
-
-// Mismos calendarios que embebía el Sites ("Presentación de formularios
-// Trimestrales" y "Anuales").
-const CALENDARIOS = [
-  {
-    titulo: "Formularios trimestrales",
-    eyebrow: "F17 y seguimiento",
-    id: "0dd6f167e0b96c288034024575da83ac032093c2cf1de1fa93717d3d748e402f@group.calendar.google.com",
-    color: "#f83a22",
-  },
-  {
-    titulo: "Formularios anuales",
-    eyebrow: "Formulación",
-    id: "3c73e4796067ca159a71ad40fd2057008e65fbb9a93f5e43a633ffcfa17d2486@group.calendar.google.com",
-    color: "#b3dc6c",
-  },
-].map((c) => ({
-  ...c,
-  embed:
-    "https://calendar.google.com/calendar/embed?" +
-    new URLSearchParams({
-      src: c.id,
-      color: c.color,
-      ctz: "America/Argentina/Buenos_Aires",
-      mode: "MONTH",
-      showTitle: "0",
-      showPrint: "0",
-      showTz: "0",
-      showCalendars: "0",
-      hl: "es",
-    }),
-  agregar: `https://calendar.google.com/calendar/u/0?cid=${btoa(c.id).replace(/=+$/, "")}`,
-}));
+import Calendario from "../components/Calendario.astro";
 
 const ACCESOS = [
   {
@@ -114,28 +82,7 @@ try {
 
     <Novedades />
 
-    <section class="consultation-section" id="calendario" style="padding-top:0;">
-      <div class="section-heading">
-        <span class="eyebrow">Calendario de presentaciones</span>
-        <h2>Fechas de entrega</h2>
-        <p>Consultá cuándo vence cada formulario. Agregá los calendarios a tu Google Calendar para tenerlos a mano.</p>
-        <span class="heading-rule"></span>
-      </div>
-      <div class="calendar-grid">
-        {
-          CALENDARIOS.map((c) => (
-            <div class="calendar-card">
-              <span class="eyebrow">{c.eyebrow}</span>
-              <h3>{c.titulo}</h3>
-              <iframe src={c.embed} title={`Calendario: ${c.titulo}`} loading="lazy" />
-              <a href={c.agregar} target="_blank" rel="noreferrer">
-                Agregar a mi Google Calendar <span aria-hidden="true">↗</span>
-              </a>
-            </div>
-          ))
-        }
-      </div>
-    </section>
+    <Calendario />
 
     <section class="consultation-help">
       <div>

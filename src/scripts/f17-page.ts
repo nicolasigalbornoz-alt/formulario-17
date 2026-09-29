@@ -64,8 +64,8 @@ export function iniciarDescargas() {
   const modo = seccion.dataset.modo === "categoria" ? "categoria" : "programa";
   const otras = (seccion.dataset.otras ?? "").split(",").filter(Boolean);
   const aviso = reporte.catprog
-    ? `Sacado por categoría programática. El F17 se carga en RAFAM por programa: consolidalo con las demás categorías ` +
-      `del programa ${reporte.programa.cod}${otras.length ? ` (${otras.join(", ")})` : ""} antes de cargarlo.`
+    ? `Sacado por categoría programática. El F17 se carga en RAFAM por programa: unificalo con las demás categorías ` +
+      `del programa ${reporte.programa.cod}${otras.length ? ` (${otras.join(", ")})` : ""} en «Unificar categorías» antes de cargarlo.`
     : undefined;
 
   const boton = seccion.querySelector<HTMLButtonElement>("#descargar")!;

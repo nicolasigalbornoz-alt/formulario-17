@@ -16,7 +16,14 @@ const usuario = Astro.locals.usuario;
     </a>
     <nav class="municipal-nav" aria-label="Navegación principal">
       <a href="/" class:list={{ active: active === "inicio" }}>Inicio</a>
-      <a href="/formulario-17" class:list={{ active: active === "f17" }}>Formulario 17</a>
+      <div class:list={["nav-menu", { active: active === "f17" }]}>
+        <a href="/formulario-17" class="nav-menu-trigger">Formulario 17 <span aria-hidden="true">▾</span></a>
+        <div class="nav-submenu">
+          <a href="/formulario-17">Descargar prellenado</a>
+          <a href="/formulario-17/unificar">Unificar categorías</a>
+          <a href="/formulario-17/avance">Avance de carga</a>
+        </div>
+      </div>
       <div class:list={["nav-menu", { active: active === "instructivos" }]}>
         <a href="/instructivos" class="nav-menu-trigger">Instructivos <span aria-hidden="true">▾</span></a>
         <div class="nav-submenu">

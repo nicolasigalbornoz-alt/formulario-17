@@ -16,9 +16,10 @@
 //   F   SUMIFS(añoant compromiso, trim = D5)   compromiso del año anterior en el trimestre D5
 //   G   SUMIFS(vigente, trim = D5-1)           crédito vigente a la fecha de corte
 //   H-K IF(trim < D5, SUMIFS(compromiso))      compromiso de cada trimestre ya cerrado
-//   L   G - M                                  ídem
+//   L   G - M                                  crédito disponible de RAFAM a la fecha de corte:
+//                                              vigente - preventivo - compromiso acumulados
 //   M   SUM(H:K)                               ídem
-//   rojo: M > G                                ídem ("excedida")
+//   rojo: M > G                                disponible negativo o M > G ("excedida")
 //
 // Todas las sumas son por jurisdicción + programa (+ categoría programática
 // si se elige una) + fuente + partida. Sin categoría, el programa es la suma
@@ -64,8 +65,10 @@ export interface F17Fila {
   creditoVigente: number;
   /** Compromiso de cada trimestre cerrado; null = trimestre a programar. */
   trimestres: [number | null, number | null, number | null, number | null];
-  /** Compromiso parcial del trimestre en curso (el que se programa), a la fecha de corte. */
-  enCurso: number;
+  /**
+   * Crédito disponible a la fecha de corte, como lo calcula RAFAM:
+   * vigente - preventivo acumulado - compromiso acumulado del año.
+   */
   disponible: number;
   totalAnual: number;
   excedida: boolean;
@@ -228,6 +231,7 @@ interface FilaActual {
   partida: string;
   trim: number;
   compromiso: number;
+  preventivo: number;
   vigente: number;
 }
 
@@ -262,7 +266,7 @@ export async function getDatosPrograma(
     sql.all<FilaActual>(
       `SELECT catprog_codigo, MAX(catprog) AS catprog, fuente_codigo, MAX(fuente) AS fuente,
               partida_codigo, MAX(partida) AS partida, (mes + 2) / 3 AS trim,
-              SUM(compromiso) AS compromiso,
+              SUM(compromiso) AS compromiso, SUM(preventivo) AS preventivo,
               SUM(CASE WHEN mes = ? THEN vigente ELSE 0 END) AS vigente
        FROM rafam_gastos
        WHERE anio = ? AND jurisdiccion_codigo = ? AND programa_codigo = ?
@@ -332,11 +336,14 @@ export function armarF17(datos: DatosPrograma, fuente: string, catprog?: string 
   const T = datos.trimestre;
   const cerrado = (t: number) => t < T;
 
-  const porPartida = new Map<string, { denom: string; vigente: number; comp: [number, number, number, number]; ant: [number, number, number, number] }>();
+  const porPartida = new Map<
+    string,
+    { denom: string; vigente: number; comprometido: number; comp: [number, number, number, number]; ant: [number, number, number, number] }
+  >();
   const get = (cod: string, denom = "") => {
     let p = porPartida.get(cod);
     if (!p) {
-      p = { denom, vigente: 0, comp: cero(), ant: cero() };
+      p = { denom, vigente: 0, comprometido: 0, comp: cero(), ant: cero() };
       porPartida.set(cod, p);
     }
     if (!p.denom && denom) p.denom = denom;
@@ -348,6 +355,8 @@ export function armarF17(datos: DatosPrograma, fuente: string, catprog?: string 
     const p = get(r.partida_codigo, r.partida);
     p.vigente += r.vigente;
     p.comp[r.trim - 1] += r.compromiso;
+    // Todo lo reservado y comprometido en el año hasta la fecha de corte.
+    p.comprometido += r.compromiso + (r.preventivo ?? 0);
   }
   for (const r of datos.anterior) {
     if (!enAlcance(r)) continue;
@@ -362,7 +371,8 @@ export function armarF17(datos: DatosPrograma, fuente: string, catprog?: string 
     const trimestres = [1, 2, 3, 4].map((t) => (cerrado(t) ? c2(p.comp[t - 1]) : null)) as F17Fila["trimestres"];
     const totalAnual = c2(trimestres.reduce<number>((a, v) => a + (v ?? 0), 0));
     const vigente = c2(p.vigente);
-    if (!(vigente > 0 || totalAnual !== 0)) continue;
+    const disponible = c2(p.vigente - p.comprometido);
+    if (!(vigente > 0 || totalAnual !== 0 || disponible < 0)) continue;
     filas.push({
       fuenteCod: fuente,
       partidaCod,
@@ -371,10 +381,10 @@ export function armarF17(datos: DatosPrograma, fuente: string, catprog?: string 
       igualTrimestreAnioAnterior: c2(p.ant[T - 1]),
       creditoVigente: vigente,
       trimestres,
-      enCurso: c2(p.comp[T - 1]),
-      disponible: c2(vigente - totalAnual),
+      disponible,
       totalAnual,
-      excedida: totalAnual > vigente,
+      // En rojo: crédito disponible negativo (no se carga en el F17).
+      excedida: disponible < 0 || totalAnual > vigente,
     });
   }
   filas.sort((a, b) => compararPartidas(a.partidaCod, b.partidaCod));
@@ -385,7 +395,6 @@ export function armarF17(datos: DatosPrograma, fuente: string, catprog?: string 
     igualTrimestreAnioAnterior: sum((x) => x.igualTrimestreAnioAnterior),
     creditoVigente: sum((x) => x.creditoVigente),
     trimestres: [0, 1, 2, 3].map((i) => (cerrado(i + 1) ? sum((x) => x.trimestres[i] ?? 0) : null)) as F17Fila["trimestres"],
-    enCurso: sum((x) => x.enCurso),
     disponible: sum((x) => x.disponible),
     totalAnual: sum((x) => x.totalAnual),
   };
