@@ -13,6 +13,8 @@ export interface HojaF17 {
   reporte: F17Reporte;
   /** Aviso que va arriba de la hoja (ej. "consolidar con las demás categorías del programa"). */
   aviso?: string;
+  /** Montos ya programados en los trimestres a programar, por fila y trimestre (ej. al unificar categorías). */
+  valores?: (number | null)[][];
 }
 
 const NAVY = "FF000A1E";
@@ -26,9 +28,9 @@ const NUM = "#,##0.00";
 const solid = (argb: string) => ({ type: "pattern" as const, pattern: "solid" as const, fgColor: { argb } });
 const pad2 = (n: number) => String(n).padStart(2, "0");
 
-export function nombreArchivo(r: F17Reporte): string {
+export function nombreArchivo(r: F17Reporte, sufijo = ""): string {
   const est = r.catprog ? `C${r.catprog.cod}` : `P${r.programa.cod}`;
-  return `F17_T${pad2(r.trimestre)}_J${r.jurisdiccion.cod}_${est}_F${r.fuente.cod}.xlsx`;
+  return `F17_T${pad2(r.trimestre)}_J${r.jurisdiccion.cod}_${est}_F${r.fuente.cod}${sufijo}.xlsx`;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,7 +83,7 @@ function agregarHoja(wb: any, hoja: HojaF17) {
   asi.alignment = { horizontal: "center" };
   ws.getCell("J2").value = "está excedida";
   ws.mergeCells("H3:J3");
-  ws.getCell("H3").value = "(total anual supera al crédito vigente)";
+  ws.getCell("H3").value = "(disponible negativo o total anual mayor al vigente)";
   for (const [rango, texto, color] of [
     ["L2:M2", "trimestre ejecutado", GRIS],
     ["L3:M3", "trimestre a programar", AZUL],
@@ -95,7 +97,7 @@ function agregarHoja(wb: any, hoja: HojaF17) {
   }
   ws.mergeCells("H5:M5");
   const fuenteDatos = ws.getCell("H5");
-  fuenteDatos.value = `Datos de RAFAM al ${fechaCorta(r.corte.hasta)} · crédito vigente a esa fecha`;
+  fuenteDatos.value = `Datos de RAFAM al ${fechaCorta(r.corte.hasta)} · crédito vigente y disponible a esa fecha`;
   fuenteDatos.font = { italic: true, color: { argb: GRIS } };
 
   for (let t = 1; t <= 4; t++) {
@@ -114,7 +116,7 @@ function agregarHoja(wb: any, hoja: HojaF17) {
     "Igual Trimestre Año Anterior",
     "Crédito Vigente",
     ...TRIMESTRE_ROMANO.map((x) => `Trimestre ${x}`),
-    T ? `Disponible (al trim. ${pad2(T)})` : "Disponible",
+    `Disponible al ${fechaCorta(r.corte.hasta).slice(0, 5)}`,
     "Total anual",
   ];
   const fila7 = ws.getRow(7);
@@ -141,11 +143,16 @@ function agregarHoja(wb: any, hoja: HojaF17) {
     row.getCell(7).value = f.creditoVigente;
     // Los trimestres a programar quedan vacíos: se completan en el Excel.
     f.trimestres.forEach((v, t) => {
+      const cargado = hoja.valores?.[i]?.[t] ?? null;
       if (v !== null) row.getCell(8 + t).value = v;
-      else row.getCell(8 + t).fill = solid(CELESTE);
+      else {
+        row.getCell(8 + t).fill = solid(CELESTE);
+        if (cargado !== null) row.getCell(8 + t).value = cargado;
+      }
     });
-    const total = f.totalAnual;
-    row.getCell(12).value = { formula: `G${n}-M${n}`, result: f.creditoVigente - total };
+    const total = f.trimestres.reduce<number>((a, v, t) => a + (v ?? hoja.valores?.[i]?.[t] ?? 0), 0);
+    // Disponible: el de RAFAM a la fecha de corte (vigente - preventivo - compromiso acumulados).
+    row.getCell(12).value = f.disponible;
     row.getCell(13).value = { formula: `SUM(H${n}:K${n})`, result: total };
     row.getCell(2).alignment = { horizontal: "center" };
     row.getCell(3).alignment = { horizontal: "center" };
@@ -160,7 +167,7 @@ function agregarHoja(wb: any, hoja: HojaF17) {
         {
           type: "expression",
           priority: 1,
-          formulae: [`$M${primera}>$G${primera}`],
+          formulae: [`OR($L${primera}<0,$M${primera}>$G${primera})`],
           style: { fill: { type: "pattern", pattern: "solid", bgColor: { argb: ROJO } }, font: { color: { argb: BLANCO } } },
         },
         {
@@ -209,6 +216,8 @@ export async function generarLibro(hojas: HojaF17[]): Promise<ArrayBuffer> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Subsecretaría de Planificación Presupuestaria y Estadística · Municipio de Morón";
   wb.created = new Date();
+  // Los totales se escriben como fórmulas sin resultado: que Excel los calcule al abrir.
+  wb.calcProperties.fullCalcOnLoad = true;
   for (const h of hojas) agregarHoja(wb, h);
   return wb.xlsx.writeBuffer();
 }

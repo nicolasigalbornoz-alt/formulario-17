@@ -1,151 +1,68 @@
 ---
-import Base from "../layouts/Base.astro";
-import { d1, getCorte, fechaCorta } from "../lib/f17";
-import Novedades from "../components/Novedades.astro";
+// Página principal del sitio: el inicio de sesión. Todo lo demás pide
+// usuario; después de ingresar, cada uno va a su página (ver inicioDe).
+import "../styles/global.css";
+import { inicioDe } from "../lib/auth";
 
-// Mismos calendarios que embebía el Sites ("Presentación de formularios
-// Trimestrales" y "Anuales").
-const CALENDARIOS = [
-  {
-    titulo: "Formularios trimestrales",
-    eyebrow: "F17 y seguimiento",
-    id: "0dd6f167e0b96c288034024575da83ac032093c2cf1de1fa93717d3d748e402f@group.calendar.google.com",
-    color: "#f83a22",
-  },
-  {
-    titulo: "Formularios anuales",
-    eyebrow: "Formulación",
-    id: "3c73e4796067ca159a71ad40fd2057008e65fbb9a93f5e43a633ffcfa17d2486@group.calendar.google.com",
-    color: "#b3dc6c",
-  },
-].map((c) => ({
-  ...c,
-  embed:
-    "https://calendar.google.com/calendar/embed?" +
-    new URLSearchParams({
-      src: c.id,
-      color: c.color,
-      ctz: "America/Argentina/Buenos_Aires",
-      mode: "MONTH",
-      showTitle: "0",
-      showPrint: "0",
-      showTz: "0",
-      showCalendars: "0",
-      hl: "es",
-    }),
-  agregar: `https://calendar.google.com/calendar/u/0?cid=${btoa(c.id).replace(/=+$/, "")}`,
-}));
-
-const ACCESOS = [
-  {
-    n: "01",
-    tag: "Programación del compromiso",
-    title: "Formulario 17",
-    text: "El F17 prellenado de los programas de tu secretaría, con el crédito vigente al último día con datos. Ingresá con tu usuario.",
-    href: "/formulario-17",
-  },
-  {
-    n: "02",
-    tag: "Guías paso a paso",
-    title: "Instructivos",
-    text: "Presupuesto por Programas, formularios de formulación, trimestrales y ejecutado de gastos.",
-    href: "/instructivos",
-  },
-  {
-    n: "03",
-    tag: "Novedades y vencimientos",
-    title: "Lista de difusión",
-    text: "Recibí información de Presupuesto y recordatorios de las fechas de entrega de formularios.",
-    href: "/lista-de-difusion",
-  },
-];
-
-let corte = null;
-try {
-  corte = await getCorte(d1(Astro.locals.runtime.env.DB));
-} catch {
-  corte = null;
-}
+const q = Astro.url.searchParams;
+const error = q.get("error");
+const volver = q.get("volver") ?? "";
+const salida = q.get("salida") === "1";
+// Si ya tiene sesión, no tiene sentido volver a pedirla.
+if (Astro.locals.usuario) return Astro.redirect(inicioDe(Astro.locals.usuario));
 ---
 
-<Base title="Inicio" active="inicio" flush>
-  <div class="home-page">
-    <section class="municipal-hero">
-      <div class="hero-content">
-        <span class="eyebrow light">Municipio de Morón · Subsecretaría de Planificación Presupuestaria y Estadística</span>
-        <h1>El presupuesto,<br />más cerca.</h1>
-        <p>
-          Descargá el Formulario 17 prellenado, consultá los instructivos y las fechas de entrega de cada
-          formulario.
-        </p>
-        <a class="btn btn-primary hero-button" href="/formulario-17">Consultar Formulario 17 <span aria-hidden="true">→</span></a>
-      </div>
-      <div class="hero-caption">
-        <span aria-hidden="true">●</span>
-        {corte ? `Datos de RAFAM al ${fechaCorta(corte.hasta)}` : "Presupuesto municipal"}
-      </div>
-    </section>
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <link rel="icon" type="image/png" href="/brand/favicon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="application-name" content="Subsecretaría de Planificación Presupuestaria y Estadística" />
+    <title>Subsecretaría de Planificación Presupuestaria y Estadística</title>
+  </head>
+  <body>
+    <main class="login-layout">
+      <section class="login-brand-panel">
+        <span class="login-logo">
+          <img src="/brand/moron-logo.png" alt="Municipio de Morón" width="100" height="110" />
+        </span>
+        <div>
+          <span class="eyebrow light">Subsecretaría de Planificación Presupuestaria y Estadística</span>
+          <h1>El presupuesto,<br />más cerca.</h1>
+          <p>Formulario 17 prellenado para cada secretaría, con los datos de RAFAM.</p>
+        </div>
+        <span class="login-photo-caption">Municipio de Morón</span>
+      </section>
+      <section class="login-form-panel">
+        <div class="login-form-wrap">
+          <span class="eyebrow">Bienvenido / Bienvenida</span>
+          <h2>Formulario<br />17.</h2>
+          <p class="login-intro">Ingresá con el usuario de tu secretaría para ver el F17 prellenado de tus programas, los instructivos y las fechas de entrega.</p>
 
-    <section class="consultation-section">
-      <div class="section-heading">
-        <span class="eyebrow">Accesos directos</span>
-        <h2>¿Qué querés consultar?</h2>
-        <span class="heading-rule"></span>
-      </div>
-      <div class="service-grid">
-        {
-          ACCESOS.map((a) => (
-            <a class="service-card" href={a.href}>
-              <div class="service-card-top">
-                <span class="service-number">{a.n}</span>
-                <span class="service-arrow" aria-hidden="true">↗</span>
-              </div>
-              <span class="eyebrow">{a.tag}</span>
-              <h3>{a.title}</h3>
-              <p>{a.text}</p>
-              <span class="service-cta">
-                Ingresar <span aria-hidden="true">→</span>
-              </span>
-            </a>
-          ))
-        }
-      </div>
-    </section>
+          {salida && !error && <div class="alert alert-success">Cerraste la sesión.</div>}
+          {error === "invalido" && <div class="alert alert-error">Usuario o contraseña incorrectos.</div>}
+          {error === "bloqueado" && <div class="alert alert-error">Demasiados intentos fallidos. Esperá unos minutos y volvé a probar.</div>}
+          {error === "config" && <div class="alert alert-warning">Falta configurar el sitio (secrets de sesión en Cloudflare).</div>}
 
-    <Novedades />
-
-    <section class="consultation-section" id="calendario" style="padding-top:0;">
-      <div class="section-heading">
-        <span class="eyebrow">Calendario de presentaciones</span>
-        <h2>Fechas de entrega</h2>
-        <p>Consultá cuándo vence cada formulario. Agregá los calendarios a tu Google Calendar para tenerlos a mano.</p>
-        <span class="heading-rule"></span>
-      </div>
-      <div class="calendar-grid">
-        {
-          CALENDARIOS.map((c) => (
-            <div class="calendar-card">
-              <span class="eyebrow">{c.eyebrow}</span>
-              <h3>{c.titulo}</h3>
-              <iframe src={c.embed} title={`Calendario: ${c.titulo}`} loading="lazy" />
-              <a href={c.agregar} target="_blank" rel="noreferrer">
-                Agregar a mi Google Calendar <span aria-hidden="true">↗</span>
-              </a>
-            </div>
-          ))
-        }
-      </div>
-    </section>
-
-    <section class="consultation-help">
-      <div>
-        <span class="eyebrow">Consultas</span>
-        <h2>¿Dudas con algún formulario?</h2>
-      </div>
-      <p>
-        Escribinos a <a href="mailto:dir.presupuesto@moron.gob.ar">dir.presupuesto@moron.gob.ar</a> o llamá al interno
-        7714. Si querés recibir los recordatorios de vencimiento, <a href="/lista-de-difusion">sumate a la lista de difusión</a>.
-      </p>
-    </section>
-  </div>
-</Base>
+          <form method="post" action="/api/auth/ingresar">
+            <input type="hidden" name="volver" value={volver} />
+            <label class="form-group">Usuario
+              <input class="form-control" name="usuario" required autofocus autocomplete="username" autocapitalize="none" placeholder="Tu usuario" />
+            </label>
+            <label class="form-group">Contraseña
+              <input class="form-control" type="password" name="clave" required autocomplete="current-password" placeholder="Tu contraseña" />
+            </label>
+            <button class="btn btn-primary login-submit" type="submit">Iniciar sesión <span aria-hidden="true">→</span></button>
+          </form>
+          <p class="login-note">
+            ¿No tenés usuario o te olvidaste la contraseña? Pedíselo a la Subsecretaría: dir.presupuesto@moron.gob.ar · Interno
+            7714.
+          </p>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

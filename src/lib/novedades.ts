@@ -15,11 +15,21 @@ export interface Aviso {
   creado_en: string;
 }
 
+export type TipoVencimiento = "trimestral" | "anual" | "otro";
+export const TIPOS_VENCIMIENTO: { valor: TipoVencimiento; label: string }[] = [
+  { valor: "trimestral", label: "Formularios trimestrales" },
+  { valor: "anual", label: "Formularios anuales" },
+  { valor: "otro", label: "Otros" },
+];
+
 export interface Vencimiento {
   id: number;
   titulo: string;
   descripcion: string | null;
+  /** Inicio del plazo (AAAA-MM-DD) o null si es solo el día del vencimiento. */
+  desde: string | null;
   fecha: string;
+  tipo: TipoVencimiento;
   alerta_dias: number;
   alerta_mismo_dia: number;
   creado_por: string | null;
@@ -69,6 +79,18 @@ export async function avisosVigentes(db: D1Database, limite = 5): Promise<Aviso[
       )
       .bind(hoy, hoy, limite)
       .all<Aviso>()
+      .then((r) => r.results ?? []),
+    []
+  );
+}
+
+/** Vencimientos cuyo plazo toca el rango [desde, hasta] (para el calendario). */
+export async function vencimientosEntre(db: D1Database, desde: string, hasta: string): Promise<Vencimiento[]> {
+  return seguro(
+    db
+      .prepare("SELECT * FROM vencimientos WHERE COALESCE(desde, fecha) <= ? AND fecha >= ? ORDER BY COALESCE(desde, fecha), fecha, id")
+      .bind(hasta, desde)
+      .all<Vencimiento>()
       .then((r) => r.results ?? []),
     []
   );
@@ -127,13 +149,25 @@ export async function guardarAviso(
 
 export async function guardarVencimiento(
   db: D1Database,
-  d: { id?: number; titulo: string; descripcion: string | null; fecha: string; alertaDias: number; alertaMismoDia: boolean; usuario: string }
+  d: {
+    id?: number;
+    titulo: string;
+    descripcion: string | null;
+    desde: string | null;
+    fecha: string;
+    tipo: TipoVencimiento;
+    alertaDias: number;
+    alertaMismoDia: boolean;
+    usuario: string;
+  }
 ): Promise<void> {
   if (d.id) {
     const antes = await db.prepare("SELECT fecha FROM vencimientos WHERE id = ?").bind(d.id).first<{ fecha: string }>();
     await db
-      .prepare("UPDATE vencimientos SET titulo = ?, descripcion = ?, fecha = ?, alerta_dias = ?, alerta_mismo_dia = ? WHERE id = ?")
-      .bind(d.titulo, d.descripcion, d.fecha, d.alertaDias, d.alertaMismoDia ? 1 : 0, d.id)
+      .prepare(
+        "UPDATE vencimientos SET titulo = ?, descripcion = ?, desde = ?, fecha = ?, tipo = ?, alerta_dias = ?, alerta_mismo_dia = ? WHERE id = ?"
+      )
+      .bind(d.titulo, d.descripcion, d.desde, d.fecha, d.tipo, d.alertaDias, d.alertaMismoDia ? 1 : 0, d.id)
       .run();
     // Si cambió la fecha, las alertas vuelven a salir para la fecha nueva.
     if (antes && antes.fecha !== d.fecha) {
@@ -142,9 +176,9 @@ export async function guardarVencimiento(
   } else {
     await db
       .prepare(
-        "INSERT INTO vencimientos (titulo, descripcion, fecha, alerta_dias, alerta_mismo_dia, creado_por) VALUES (?, ?, ?, ?, ?, ?)"
+        "INSERT INTO vencimientos (titulo, descripcion, desde, fecha, tipo, alerta_dias, alerta_mismo_dia, creado_por) VALUES (?, ?, ?, ?, ?, ?, ?, ?)"
       )
-      .bind(d.titulo, d.descripcion, d.fecha, d.alertaDias, d.alertaMismoDia ? 1 : 0, d.usuario)
+      .bind(d.titulo, d.descripcion, d.desde, d.fecha, d.tipo, d.alertaDias, d.alertaMismoDia ? 1 : 0, d.usuario)
       .run();
   }
 }

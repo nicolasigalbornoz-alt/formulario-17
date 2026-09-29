@@ -1,0 +1,25 @@
+---
+// Encabezado y pestañas de las tres secciones del Formulario 17.
+interface Props {
+  active: "prellenado" | "unificar" | "avance";
+  texto: string;
+}
+const { active, texto } = Astro.props;
+const links = [
+  { key: "prellenado", href: "/formulario-17", label: "Descargar prellenado" },
+  { key: "unificar", href: "/formulario-17/unificar", label: "Unificar categorías" },
+  { key: "avance", href: "/formulario-17/avance", label: "Avance de carga" },
+];
+---
+
+<div class="page-heading">
+  <div>
+    <span class="eyebrow">Programación financiera del compromiso</span>
+    <h1>Formulario 17</h1>
+    <p>{texto}</p>
+  </div>
+  <span class="page-heading-mark" aria-hidden="true">17</span>
+</div>
+<nav class="admin-nav no-print" aria-label="Secciones del Formulario 17">
+  {links.map((l) => <a href={l.href} class:list={{ active: l.key === active }}>{l.label}</a>)}
+</nav>

@@ -13,6 +13,8 @@ import {
   hoyAR,
   fechaLarga,
   diasHasta,
+  TIPOS_VENCIMIENTO,
+  type TipoVencimiento,
 } from "../../lib/novedades";
 
 const env = Astro.locals.runtime.env;
@@ -54,12 +56,17 @@ if (Astro.request.method === "POST") {
       const titulo = texto("titulo");
       const fecha = texto("fecha", 10);
       const alertaDias = Math.max(0, Math.min(30, Number(f.get("alerta_dias")) || 0));
+      const desde = texto("desde", 10) || null;
+      const tipo = (TIPOS_VENCIMIENTO.find((t) => t.valor === f.get("tipo"))?.valor ?? "otro") as TipoVencimiento;
       if (!titulo || !FECHA.test(fecha)) error = "Completá el título y la fecha.";
+      else if (desde && (!FECHA.test(desde) || desde > fecha)) error = "El inicio del plazo tiene que ser anterior al vencimiento.";
       else {
         await guardarVencimiento(db, {
           id,
           titulo,
           descripcion: texto("descripcion", 2000) || null,
+          desde,
+          tipo,
           fecha,
           alertaDias,
           alertaMismoDia: f.get("alerta_mismo_dia") === "1",
@@ -127,8 +134,8 @@ const vigenteAviso = (a: { desde: string; hasta: string | null }) => a.desde <= 
       <div>
         <h2 class="card-title">Fechas de vencimiento</h2>
         <p class="card-intro">
-          Se muestran en el inicio y en el Formulario 17. Las alertas por mail a los {activos?.n ?? 0} suscriptos salen solas todos
-          los días a las 8:00: unos días antes (lo que elijas) y el mismo día.
+          Arman el calendario de entregas del inicio y se muestran en el Formulario 17. Las alertas por mail a los {activos?.n ?? 0}
+          suscriptos salen solas todos los días a las 8:00: unos días antes del vencimiento (lo que elijas) y el mismo día.
         </p>
       </div>
       <form method="post">
@@ -158,11 +165,15 @@ const vigenteAviso = (a: { desde: string; hasta: string | null }) => a.desde <= 
                 return (
                   <tr style={faltan < 0 ? "color:#999;" : ""}>
                     <td style="white-space:nowrap;">
+                      {v.desde && <small>del {fechaLarga(v.desde)} al</small>}
+                      {v.desde && <br />}
                       <strong>{fechaLarga(v.fecha)}</strong>
                       <br />
                       <small>{faltan < 0 ? "vencido" : faltan === 0 ? "hoy" : `en ${faltan} días`}</small>
                     </td>
                     <td>
+                      <span class:list={["tipo-chip", `tipo-${v.tipo}`]}>{TIPOS_VENCIMIENTO.find((t) => t.valor === v.tipo)?.label}</span>
+                      <br />
                       <strong>{v.titulo}</strong>
                       {v.descripcion && <div style="font-size:13px; color:#666;">{v.descripcion}</div>}
                     </td>
@@ -191,9 +202,19 @@ const vigenteAviso = (a: { desde: string; hasta: string | null }) => a.desde <= 
                             <label class="form-group">Título
                               <input class="form-control" name="titulo" value={v.titulo} required maxlength="160" />
                             </label>
-                            <label class="form-group">Fecha
-                              <input class="form-control" type="date" name="fecha" value={v.fecha} required />
+                            <label class="form-group">Tipo
+                              <select class="form-control" name="tipo">
+                                {TIPOS_VENCIMIENTO.map((t) => <option value={t.valor} selected={t.valor === v.tipo}>{t.label}</option>)}
+                              </select>
                             </label>
+                            <div class="form-row">
+                              <label class="form-group">Desde (opcional)
+                                <input class="form-control" type="date" name="desde" value={v.desde ?? ""} />
+                              </label>
+                              <label class="form-group">Vence
+                                <input class="form-control" type="date" name="fecha" value={v.fecha} required />
+                              </label>
+                            </div>
                             <label class="form-group">Detalle (opcional)
                               <textarea class="form-control" name="descripcion" maxlength="2000" style="min-height:80px;">{v.descripcion}</textarea>
                             </label>
@@ -232,7 +253,16 @@ const vigenteAviso = (a: { desde: string; hasta: string | null }) => a.desde <= 
         <label class="form-group">Título
           <input class="form-control" name="titulo" required maxlength="160" placeholder="Ej: Presentación F17 del IV trimestre" />
         </label>
-        <label class="form-group">Fecha
+        <label class="form-group">Tipo
+          <select class="form-control" name="tipo">
+            {TIPOS_VENCIMIENTO.map((t) => <option value={t.valor}>{t.label}</option>)}
+          </select>
+        </label>
+        <label class="form-group">Desde (opcional)
+          <input class="form-control" type="date" name="desde" />
+          <small>Si es un plazo de presentación, el primer día.</small>
+        </label>
+        <label class="form-group">Vence
           <input class="form-control" type="date" name="fecha" required min={hoy} />
         </label>
         <label class="form-group">Alerta anticipada

@@ -438,34 +438,6 @@ textarea {
   line-height: 1.8;
 }
 
-.calendar-grid {
-  display: grid;
-  gap: 24px;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-.calendar-card {
-  background: #fff;
-  border: 1px solid var(--moron-border);
-  border-top: 4px solid var(--moron-red);
-  padding: 22px 22px 18px;
-}
-.calendar-card h3 {
-  font: 700 19px "Neo Sans", sans-serif;
-  margin: 6px 0 14px;
-}
-.calendar-card iframe {
-  border: 0;
-  display: block;
-  height: 420px;
-  width: 100%;
-}
-.calendar-card a {
-  display: inline-block;
-  font-size: 13px;
-  font-weight: 700;
-  margin-top: 12px;
-  text-decoration: none;
-}
 
 /* ---------------------------------------------------------------- páginas internas */
 
@@ -1196,6 +1168,167 @@ code.clave {
   flex-wrap: wrap;
 }
 
+/* Calendario propio */
+:root {
+  --tipo-trimestral: #f83a22;
+  --tipo-anual: #7cb342;
+  --tipo-otro: #5b7fa6;
+  --tipo-trimestral-claro: #fde0dc;
+  --tipo-anual-claro: #e5f1d8;
+  --tipo-otro-claro: #e1e9f2;
+}
+.calendario-barra {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.calendario-leyenda {
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 8px 18px;
+}
+.calendario-leyenda span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+}
+.calendario-leyenda i {
+  border-radius: 3px;
+  display: inline-block;
+  height: 14px;
+  width: 14px;
+}
+.calendario-leyenda i.tipo-trimestral { background: var(--tipo-trimestral); }
+.calendario-leyenda i.tipo-anual { background: var(--tipo-anual); }
+.calendario-leyenda i.tipo-otro { background: var(--tipo-otro); }
+.calendario-leyenda i.dia-vence { background: #fff; border: 2px solid var(--moron-charcoal); }
+.calendario-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.calendario-mes {
+  background: #fff;
+  border: 1px solid var(--moron-border);
+  border-top: 4px solid var(--moron-red);
+  padding: 16px 16px 12px;
+}
+.calendario-mes h3 {
+  font: 700 17px "Neo Sans", sans-serif;
+  letter-spacing: 0;
+  margin-bottom: 10px;
+}
+.calendario-mes table {
+  border-collapse: separate;
+  border-spacing: 3px;
+  table-layout: fixed;
+  width: 100%;
+}
+.calendario-mes th {
+  color: #888;
+  font-size: 11px;
+  font-weight: 700;
+  padding-bottom: 4px;
+}
+.calendario-mes td {
+  border-radius: 3px;
+  font-size: 13px;
+  height: 34px;
+  text-align: center;
+}
+.calendario-mes td.hoy {
+  box-shadow: inset 0 0 0 2px var(--moron-charcoal);
+  font-weight: 700;
+}
+.calendario-mes td.en-plazo.tipo-trimestral { background: var(--tipo-trimestral-claro); }
+.calendario-mes td.en-plazo.tipo-anual { background: var(--tipo-anual-claro); }
+.calendario-mes td.en-plazo.tipo-otro { background: var(--tipo-otro-claro); }
+.calendario-mes td.vence {
+  color: #fff;
+  font-weight: 700;
+}
+.calendario-mes td.vence.tipo-trimestral { background: var(--tipo-trimestral); }
+.calendario-mes td.vence.tipo-anual { background: var(--tipo-anual); }
+.calendario-mes td.vence.tipo-otro { background: var(--tipo-otro); }
+.calendario-mes td[title] {
+  cursor: help;
+}
+.calendario-lista {
+  margin-top: 20px;
+}
+.calendario-lista ul {
+  list-style: none;
+}
+.calendario-lista li {
+  border-top: 1px solid #eee;
+  font-size: 14px;
+  line-height: 1.5;
+  padding: 10px 0;
+}
+.calendario-lista li:first-child {
+  border-top: 0;
+}
+.calendario-lista li.pasado {
+  color: #999;
+}
+.calendario-lista small {
+  color: #666;
+  display: block;
+  font-size: 13px;
+}
+.tipo-chip {
+  border-radius: 3px;
+  color: #fff;
+  display: inline-block;
+  font-size: 11px;
+  font-weight: 700;
+  margin-right: 8px;
+  padding: 2px 7px;
+}
+.tipo-chip.tipo-trimestral { background: var(--tipo-trimestral); }
+.tipo-chip.tipo-anual { background: var(--tipo-anual); }
+.tipo-chip.tipo-otro { background: var(--tipo-otro); }
+
+/* Unificar categorías */
+.dropzone {
+  align-items: center;
+  background: #fafafa;
+  border: 2px dashed #cfcfcf;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 18px;
+  min-height: 140px;
+  padding: 24px;
+  text-align: center;
+}
+.dropzone input {
+  height: 1px;
+  opacity: 0;
+  position: absolute;
+  width: 1px;
+}
+.dropzone strong {
+  color: var(--moron-red-dark);
+  font: 700 17px "Neo Sans", sans-serif;
+}
+.dropzone span {
+  color: #777;
+  font-size: 13px;
+}
+.dropzone.arrastrando,
+.dropzone:hover {
+  background: #fff6f6;
+  border-color: var(--moron-red);
+}
+
 /* ---------------------------------------------------------------- responsive */
 
 @media (max-width: 1330px) {
@@ -1265,7 +1398,7 @@ code.clave {
   .consultation-help {
     gap: 25px;
   }
-  .calendar-grid,
+  .calendario-grid,
   .instructivo-layout,
   .novedades-grid {
     grid-template-columns: 1fr;

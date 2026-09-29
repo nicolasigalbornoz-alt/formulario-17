@@ -1,0 +1,148 @@
+---
+import Base from "../../layouts/Base.astro";
+import F17Nav from "../../components/F17Nav.astro";
+import { d1, getCorte, listJurisdicciones, trimestresDisponibles, trimestreElegido, TRIMESTRE_ROMANO, NOMBRE_TRIMESTRE, type CodDenom } from "../../lib/f17";
+import { puedeVer } from "../../lib/auth";
+import { estadoProgramas, fechaHoraAR, type EstadoPrograma } from "../../lib/seguimiento";
+
+// Avance de la carga del F17 en RAFAM, por programa: separado de la pantalla
+// donde se ve y descarga el prellenado.
+const usuario = Astro.locals.usuario!;
+const sql = d1(Astro.locals.runtime.env.DB);
+const params = Astro.url.searchParams;
+const corte = await getCorte(sql);
+const disponibles = corte ? trimestresDisponibles(corte) : [];
+const T = corte ? trimestreElegido(corte, params.get("trimestre")) : null;
+
+let jurisdicciones: CodDenom[] = [];
+let jurisdiccion = params.get("jurisdiccion") || "";
+let estado: EstadoPrograma[] = [];
+if (corte && T) {
+  jurisdicciones = (await listJurisdicciones(sql, corte)).filter((j) => puedeVer(usuario, j.cod));
+  if (!jurisdicciones.some((j) => j.cod === jurisdiccion)) jurisdiccion = jurisdicciones[0]?.cod ?? "";
+  if (jurisdiccion) estado = await estadoProgramas(sql, corte, T, [jurisdiccion]);
+}
+const cargados = estado.filter((e) => e.cargado_en).length;
+const volverAca = Astro.url.pathname + Astro.url.search;
+---
+
+<Base title="Avance de carga · Formulario 17" active="f17">
+  <F17Nav
+    active="avance"
+    texto="Marcá cada programa cuando termines de cargar su Formulario 17 en RAFAM. La Subsecretaría sigue el avance de todas las secretarías con esta información."
+  />
+
+  {!corte && <div class="alert alert-warning">Todavía no hay datos de RAFAM cargados.</div>}
+
+  {
+    corte && T && (
+      <form method="get" class="card no-print">
+        <div class="search-bar">
+          <label class="filter-field" style="flex-grow:0; min-width:190px;">
+            <span>Trimestre</span>
+            <select class="form-control" name="trimestre" onchange="this.form.submit()">
+              {disponibles.map((t) => (
+                <option value={t} selected={t === T}>
+                  {TRIMESTRE_ROMANO[t - 1]} · {NOMBRE_TRIMESTRE[t - 1]}
+                </option>
+              ))}
+            </select>
+          </label>
+          {jurisdicciones.length > 1 && (
+            <label class="filter-field">
+              <span>Jurisdicción</span>
+              <select class="form-control" name="jurisdiccion" onchange="this.form.submit()">
+                {jurisdicciones.map((j) => (
+                  <option value={j.cod} selected={j.cod === jurisdiccion}>
+                    {j.cod} - {j.denom}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <noscript>
+            <button class="btn btn-secondary" type="submit">Ver</button>
+          </noscript>
+        </div>
+      </form>
+    )
+  }
+
+  {
+    T && jurisdiccion && (
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2 class="card-title">
+              {jurisdicciones.find((j) => j.cod === jurisdiccion)?.denom} · {TRIMESTRE_ROMANO[T - 1]} trimestre {corte!.anio}
+            </h2>
+            <p class="card-intro">Programas con crédito vigente: último Excel descargado y si ya se cargó en RAFAM.</p>
+          </div>
+          <span class="selection-count">
+            {cargados} de {estado.length} cargados
+          </span>
+        </div>
+        {estado.length === 0 ? (
+          <p class="empty-state">No hay programas con crédito vigente en esta jurisdicción.</p>
+        ) : (
+          <div class="table-container">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>Programa</th>
+                  <th>Último Excel descargado</th>
+                  <th>Cargado en RAFAM</th>
+                </tr>
+              </thead>
+              <tbody>
+                {estado.map((e) => (
+                  <tr>
+                    <td>
+                      <a href={`/formulario-17?trimestre=${T}&jurisdiccion=${e.jurisdiccion_codigo}&programa=${e.programa_codigo}`}>
+                        <strong>{e.programa_codigo}</strong> · {e.programa}
+                      </a>
+                      {e.categorias > 1 && <small style="color:#777;"> ({e.categorias} categorías)</small>}
+                    </td>
+                    <td style="font-size:13px;">
+                      {e.ultima_descarga ? (
+                        <>
+                          {fechaHoraAR(e.ultima_descarga)} · {e.descargado_por}{" "}
+                          {e.modo_descarga === "categoria" && <span class="badge badge-warning">por categoría</span>}
+                        </>
+                      ) : (
+                        <span style="color:#999;">Sin descargar</span>
+                      )}
+                    </td>
+                    <td>
+                      <form method="post" action="/api/f17/carga" class="form-carga">
+                        <input type="hidden" name="jurisdiccion" value={e.jurisdiccion_codigo} />
+                        <input type="hidden" name="programa" value={e.programa_codigo} />
+                        <input type="hidden" name="cargado" value={e.cargado_en ? "0" : "1"} />
+                        <input type="hidden" name="trimestre" value={T} />
+                        <input type="hidden" name="volver" value={volverAca} />
+                        {e.cargado_en ? (
+                          <>
+                            <span class="badge badge-success">
+                              ✓ {fechaHoraAR(e.cargado_en)} · {e.cargado_por}
+                            </span>
+                            <button class="btn btn-secondary btn-sm" type="submit">
+                              Desmarcar
+                            </button>
+                          </>
+                        ) : (
+                          <button class="btn btn-secondary btn-sm" type="submit">
+                            Marcar como cargado
+                          </button>
+                        )}
+                      </form>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    )
+  }
+</Base>

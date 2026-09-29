@@ -1,5 +1,5 @@
 import type { APIRoute } from "astro";
-import { ingresar, SESSION_COOKIE, SESSION_MAX_AGE_S } from "../../../lib/auth";
+import { ingresar, inicioDe, SESSION_COOKIE, SESSION_MAX_AGE_S } from "../../../lib/auth";
 
 /** Solo rutas internas del sitio (evita redirigir a otro dominio). */
 const rutaSegura = (v: string) => (v.startsWith("/") && !v.startsWith("//") && !v.startsWith("/\\") ? v : "");
@@ -12,9 +12,10 @@ export const POST: APIRoute = async ({ request, locals, redirect, cookies }) => 
 
   if (!r.ok) {
     const qs = new URLSearchParams({ error: r.motivo, ...(volver ? { volver } : {}) });
-    return redirect(`/ingresar?${qs}`, 303);
+    return redirect(`/?${qs}`, 303);
   }
   cookies.set(SESSION_COOKIE, r.cookie, { httpOnly: true, secure: true, sameSite: "lax", path: "/", maxAge: SESSION_MAX_AGE_S });
-  const destino = volver && !(volver.startsWith("/admin") && r.usuario.rol !== "admin") ? volver : r.usuario.rol === "admin" ? "/admin" : "/formulario-17";
+  // Vuelve a la página que se pidió; si no, cada uno a la suya.
+  const destino = volver && volver !== "/" ? volver : inicioDe(r.usuario);
   return redirect(destino, 303);
 };

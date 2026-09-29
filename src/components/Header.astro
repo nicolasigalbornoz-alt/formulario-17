@@ -1,5 +1,6 @@
 ---
 import { INSTRUCTIVOS } from "../lib/instructivos";
+import { inicioDe } from "../lib/auth";
 
 interface Props {
   active?: string;
@@ -10,20 +11,27 @@ const usuario = Astro.locals.usuario;
 
 <header class="municipal-header">
   <div class="municipal-header-inner">
-    <a href="/" class="municipal-brand" aria-label="Subsecretaría de Planificación Presupuestaria y Estadística · Inicio">
+    <a href={usuario ? inicioDe(usuario) : "/"} class="municipal-brand" aria-label="Subsecretaría de Planificación Presupuestaria y Estadística · Inicio">
       <img src="/brand/moron-logo.png" alt="Municipio de Morón" width="72" height="74" />
       <span>Subsecretaría de<br /><strong>Planificación Presupuestaria<br />y Estadística</strong></span>
     </a>
     <nav class="municipal-nav" aria-label="Navegación principal">
-      <a href="/" class:list={{ active: active === "inicio" }}>Inicio</a>
-      <a href="/formulario-17" class:list={{ active: active === "f17" }}>Formulario 17</a>
+      {usuario?.rol === "admin" && <a href="/inicio" class:list={{ active: active === "inicio" }}>Inicio</a>}
+      <div class:list={["nav-menu", { active: active === "f17" }]}>
+        <a href="/formulario-17" class="nav-menu-trigger">Formulario 17 <span aria-hidden="true">▾</span></a>
+        <div class="nav-submenu">
+          <a href="/formulario-17">Descargar prellenado</a>
+          <a href="/formulario-17/unificar">Unificar categorías</a>
+          <a href="/formulario-17/avance">Avance de carga</a>
+        </div>
+      </div>
       <div class:list={["nav-menu", { active: active === "instructivos" }]}>
         <a href="/instructivos" class="nav-menu-trigger">Instructivos <span aria-hidden="true">▾</span></a>
         <div class="nav-submenu">
           {INSTRUCTIVOS.map((i) => <a href={`/instructivos/${i.slug}`}>{i.menu}</a>)}
         </div>
       </div>
-      <a href="/#calendario" class:list={{ active: active === "calendario" }}>Calendario</a>
+      <a href="/calendario" class:list={{ active: active === "calendario" }}>Calendario</a>
       <a href="/lista-de-difusion" class:list={{ active: active === "mailing" }}>Lista de difusión</a>
       {usuario?.rol === "admin" && <a href="/admin" class:list={{ active: active === "admin" }}>Panel</a>}
     </nav>
@@ -42,7 +50,7 @@ const usuario = Astro.locals.usuario;
             </form>
           </>
         ) : (
-          <a class="header-button" href="/ingresar">
+          <a class="header-button" href="/">
             Ingresar<span aria-hidden="true">↗</span>
           </a>
         )

@@ -198,3 +198,11 @@ export async function ingresar(db: D1Database, env: Env, usuario: string, clave:
 export function puedeVer(u: Usuario, jurisdiccion: string): boolean {
   return u.jurisdicciones === null || u.jurisdicciones.includes(jurisdiccion);
 }
+
+/**
+ * Página a la que entra cada uno después de ingresar: el administrador, al
+ * inicio (solo para administradores); las secretarías, directo a su F17.
+ */
+export function inicioDe(u: Usuario): string {
+  return u.rol === "admin" ? "/inicio" : "/formulario-17";
+}

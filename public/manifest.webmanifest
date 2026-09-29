@@ -1,0 +1,11 @@
+{
+  "name": "Subsecretaría de Planificación Presupuestaria y Estadística",
+  "short_name": "Presupuesto y Estadística",
+  "description": "Formulario 17 prellenado, instructivos y fechas de entrega. Municipio de Morón.",
+  "lang": "es",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#f5f5f5",
+  "theme_color": "#212121",
+  "icons": [{ "src": "/brand/favicon.png", "sizes": "128x128", "type": "image/png" }]
+}
