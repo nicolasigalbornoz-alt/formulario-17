@@ -91,8 +91,8 @@ const q = Astro.url.searchParams;
       <div class="card" id="sync-rafamor">
         <span class="eyebrow">Carga automática</span>
         <p class="card-intro">
-          El mes en curso se trae solo, cada 4 horas, desde RAFAMOR SQL (la base en la nube que actualiza RAFAMOR). Nunca pisa un
-          mes que ya quedó cerrado con un reporte de RAFAM subido acá o con <code>sync-rafamor.mjs</code>.
+          Cada 4 horas se traen solos desde RAFAMOR SQL (la base en la nube que actualiza RAFAMOR) el mes en curso y cualquier mes
+          que haya quedado parcial. Nunca pisa un mes ya cerrado ni un reporte de RAFAM de la misma fecha.
         </p>
         <div id="sync-rafamor-resultado" class="alert alert-warning" hidden></div>
         <div class="form-actions" style="justify-content:flex-start;">

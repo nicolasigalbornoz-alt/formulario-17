@@ -88,14 +88,14 @@ export function iniciarSubidaRafam() {
 }
 
 interface ResultadoSync {
-  anio: number;
-  mes: number;
-  hasta: string;
-  filas: number;
-  omitido?: string;
+  meses: { anio: number; mes: number; hasta: string; filas: number; mesCompleto: boolean }[];
+  pendientes: number;
+  ultimoDia: string;
   jurisdiccionesOmitidas: string[];
   error?: string;
 }
+
+const fecha = (iso: string) => iso.split("-").reverse().join("/");
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
@@ -118,19 +118,26 @@ export function iniciarSyncRafamor() {
       const res = await fetch("/api/admin/sync-rafamor", { method: "POST" });
       const r = (await res.json()) as ResultadoSync;
       if (!res.ok || r.error) throw new Error(r.error ?? `Error ${res.status}`);
-      const mesTxt = r.mes ? `${MESES[r.mes - 1]} de ${r.anio}` : "";
-      if (r.omitido) {
-        mostrar("alert-warning", r.omitido);
-      } else {
-        mostrar(
-          "alert-success",
-          `<strong>${mesTxt}</strong> actualizado al ${r.hasta.split("-").reverse().join("/")}: ${r.filas.toLocaleString("es-AR")} partidas.` +
-            (r.jurisdiccionesOmitidas.length
-              ? `<br><small>Sin código de jurisdicción, no se sincronizaron: ${r.jurisdiccionesOmitidas.join(", ")}.</small>`
-              : "")
-        );
+      if (r.meses.length === 0) {
+        mostrar("alert-success", `La base ya estaba al día con RAFAMOR SQL (datos al ${fecha(r.ultimoDia)}).`);
+        return;
       }
-      setTimeout(() => location.reload(), r.omitido ? 0 : 1500);
+      const lista = r.meses
+        .map(
+          (m) =>
+            `<li><strong>${MESES[m.mes - 1]} de ${m.anio}</strong> al ${fecha(m.hasta)}${m.mesCompleto ? " (mes completo)" : " (parcial)"}: ` +
+            `${m.filas.toLocaleString("es-AR")} partidas</li>`
+        )
+        .join("");
+      mostrar(
+        "alert-success",
+        `<ul style="margin:0; padding-left:18px;">${lista}</ul>` +
+          (r.pendientes ? `<p style="margin:8px 0 0;">Quedan ${r.pendientes} mes(es) más por traer: volvé a apretar el botón.</p>` : "") +
+          (r.jurisdiccionesOmitidas.length
+            ? `<p style="margin:8px 0 0;"><small>Sin código de jurisdicción, no se sincronizaron: ${r.jurisdiccionesOmitidas.join(", ")}.</small></p>`
+            : "")
+      );
+      if (!r.pendientes) setTimeout(() => location.reload(), 2500);
     } catch (err) {
       mostrar("alert-error", `No se pudo sincronizar: ${err instanceof Error ? err.message : err}`);
     } finally {

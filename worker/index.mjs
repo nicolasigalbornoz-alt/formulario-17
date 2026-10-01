@@ -19,7 +19,7 @@ async function hmacHex(value, secret) {
 }
 
 async function llamarCron(ruta, tokenFor, env, ctx) {
-  const base = (env.SITE_URL || "https://formulario-17.interno").replace(/\/$/, "");
+  const base = (env.SITE_URL || "https://presupuesto.interno").replace(/\/$/, "");
   const req = new Request(`${base}${ruta}`, {
     method: "POST",
     headers: { "x-cron-token": await hmacHex(tokenFor, env.SESSION_SECRET ?? "") },

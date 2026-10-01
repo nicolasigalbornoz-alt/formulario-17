@@ -1349,28 +1349,27 @@ code.clave {
   }
 }
 
-/* Con el nombre completo de la Subsecretaría el menú no entra al lado de la
-   marca: pasa a su propia fila, debajo. */
-@media (max-width: 1180px) {
-  .municipal-header-inner {
-    gap: 12px 22px;
-  }
-  .municipal-brand {
-    margin-right: auto;
-  }
-  .municipal-account {
-    order: 1;
-  }
-  .municipal-nav {
-    flex-basis: 100%;
-    gap: 22px;
-    justify-content: flex-start;
-    order: 2;
-  }
-  .municipal-nav a,
-  .nav-menu-trigger {
-    padding: 6px 0 9px;
-  }
+/* Con el nombre completo de la Subsecretaría y los dos formularios, el menú no
+   entra al lado de la marca en ningún ancho (el encabezado llega a 1320 px):
+   va siempre en su propia fila, debajo. */
+.municipal-header-inner {
+  gap: 12px 22px;
+}
+.municipal-brand {
+  margin-right: auto;
+}
+.municipal-account {
+  order: 1;
+}
+.municipal-nav {
+  flex-basis: 100%;
+  gap: 22px;
+  justify-content: flex-start;
+  order: 2;
+}
+.municipal-nav a,
+.nav-menu-trigger {
+  padding: 6px 0 9px;
 }
 
 @media (max-width: 900px) {
@@ -1638,5 +1637,20 @@ code.clave {
   }
   .login-form-wrap h2 {
     font-size: 36px;
+  }
+}
+
+/* Inicio: cuatro accesos directos (dos por fila en pantallas medianas, uno en el celular). */
+.service-grid.cuatro {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+@media (max-width: 1100px) {
+  .service-grid.cuatro {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 640px) {
+  .service-grid.cuatro {
+    grid-template-columns: 1fr;
   }
 }

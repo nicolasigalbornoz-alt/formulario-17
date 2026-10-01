@@ -165,15 +165,19 @@ arreglar también allá:
    quedan sin código de jurisdicción (acá se toma del código RAFAM:
    `1110109000` → 09).
 
-Hay tres formas de cargar los datos. Las tres escriben la misma tabla, así
-que convivir no rompe nada: la foto de un mes ya cerrado con un reporte
-completo de RAFAM (manual o `sync-rafamor.mjs`) nunca se pisa.
+Hay tres formas de cargar los datos. Las tres escriben la misma tabla y
+ninguna vuelve atrás: un mes solo se reemplaza con una foto más nueva (o, a
+igual fecha, con el reporte completo de RAFAM, que trae además
+aprobado/modificaciones/preventivo). Un mes ya cerrado no se pisa nunca.
 
 - **Automática en la nube** (la que corre siempre, sin depender de ninguna
   PC): cada 4 horas, una tarea programada del Worker (`wrangler.toml` →
   `[triggers]`, `worker/index.mjs`) consulta **RAFAMOR SQL**
   (`https://rafamor-sql.pages.dev`, la base de lectura que regenera RAFAMOR a
-  diario con lo que baja de RAFAM) y reemplaza la foto del mes en curso. Ver
+  diario con lo que baja de RAFAM) y trae cada mes de los últimos 12 que allá
+  tenga una foto más nueva que la cargada: el mes en curso y los que hayan
+  quedado parciales o sin cargar (hasta 3 por corrida). Así se cierran solos
+  los trimestres y se habilita el siguiente en el F17. Ver
   `src/lib/sync-rafamor-sql.ts` para el detalle y sus límites:
   - No trae `aprobado`/`modificaciones`/`preventivo` (esa API no los tiene):
     quedan en 0 hasta que un reporte completo (manual o `sync-rafamor.mjs`)
@@ -183,10 +187,12 @@ completo de RAFAM (manual o `sync-rafamor.mjs`) nunca se pisa.
     `migrations/0003_usuarios.sql` (`JURISDICCION_CODIGO_POR_NOMBRE`). Una
     jurisdicción nueva que no esté ahí se omite (avisado en el resultado del
     botón "Sincronizar ahora" del panel → Datos de RAFAM).
-  - El nombre del programa (más grueso que la categoría programática, que es
-    lo único que da esta API) solo se completa para "Actividad Central" (01)
-    y para programas sin sub-actividades; el resto queda sin nombre hasta que
-    algún mes con el reporte completo lo aporte.
+  - Los nombres de programa y de fuente (esta API solo da la categoría
+    programática y el código de fuente) se toman de los que ya tenga la base
+    de los reportes completos; si no hay, "Actividad Central" para el 01, el
+    de la categoría para programas sin actividades y los de las planillas
+    "registros f17" para las fuentes 110/131/132/133. Lo que quede sin nombre
+    se muestra como "Programa NN" / "Fuente NNN".
   - Necesita los secrets `RAFAMOR_CF_CLIENT_ID` / `RAFAMOR_CF_CLIENT_SECRET`
     (el token de servicio de Cloudflare Access que entrega quien administra
     RAFAMOR). Sin ellos, el sync queda inactivo (no rompe nada, solo no
@@ -222,7 +228,7 @@ los mails de los demás), con un enlace de baja al pie y en el encabezado
   Worker (`src/lib/smtp.ts`, sin dependencias). **No sale ningún mail hasta
   que se cargue la contraseña de la casilla como secret:**
   ```bash
-  npx wrangler secret put MAIL_SMTP_PASSWORD --name formulario-17
+  npx wrangler secret put MAIL_SMTP_PASSWORD --name presupuesto
   ```
   Probado contra un servidor SMTP falso local; la conexión real se prueba
   con el primer envío (el servidor tiene que aceptar conexiones al 465 desde
@@ -246,7 +252,10 @@ npm run dev
 
 ## Deploy (Cloudflare Workers + D1)
 
-El repo está conectado como proyecto de **Workers** (Workers Builds):
+El repo está conectado como proyecto de **Workers** (Workers Builds), con el
+Worker llamado **`presupuesto`** (`name` en `wrangler.toml`, que tiene que
+coincidir con el del dashboard). URL: https://presupuesto.moron-presupuesto.workers.dev
+(la vieja `formulario-17.…workers.dev` dejó de existir al renombrarlo).
 
 - Build command: `npm run build`
 - Deploy command: `npx wrangler deploy --no-autoconfig`

@@ -1,4 +1,7 @@
-name = "formulario-17"
+# Tiene que coincidir con el nombre del Worker en el dashboard (Workers Builds
+# falla si no). Se renombró de "formulario-17" a "presupuesto" el 01/10/2026:
+# la URL pasó a ser presupuesto.moron-presupuesto.workers.dev.
+name = "presupuesto"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 # Las variables que no están en [vars] (MAIL_PROVIDER, ...) se cargan en el
@@ -25,10 +28,10 @@ binding = "ASSETS"
 [vars]
 # URL pública: para los enlaces de los mails (baja, F17) que salen desde la
 # tarea programada, que no tiene un pedido del que tomar la dirección.
-SITE_URL = "https://formulario-17.moron-presupuesto.workers.dev"
+SITE_URL = "https://presupuesto.moron-presupuesto.workers.dev"
 # Mails desde la casilla institucional por SMTP (ver src/lib/mail-sender.ts).
 # No sale nada hasta que se cargue la contraseña como secret:
-#   npx wrangler secret put MAIL_SMTP_PASSWORD --name formulario-17
+#   npx wrangler secret put MAIL_SMTP_PASSWORD --name presupuesto
 MAIL_PROVIDER = "smtp"
 MAIL_SMTP_HOST = "mail.moron.gob.ar"
 MAIL_SMTP_PORT = "465"

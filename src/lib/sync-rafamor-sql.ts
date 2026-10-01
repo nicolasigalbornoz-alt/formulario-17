@@ -1,12 +1,14 @@
 // Sincronización automática desde la API de RAFAMOR SQL (lectura, se
-// regenera a diario con lo que baja RAFAMOR): mantiene fresco el mes en
-// curso en `rafam_gastos` sin depender de que alguien corra
-// `sync-rafamor.mjs` a mano en la PC de RAFAMOR. La llaman:
+// regenera a diario con lo que baja RAFAMOR): mantiene al día `rafam_gastos`
+// sin depender de que alguien corra `sync-rafamor.mjs` en la PC de RAFAMOR.
+// La llaman:
 //  - src/pages/api/cron/sync-rafamor.ts (tarea programada, ver worker/index.mjs)
 //  - src/pages/api/admin/sync-rafamor.ts (botón "Sincronizar ahora" del panel)
 //
-// Nunca toca un mes que ya quedó cerrado con un reporte de RAFAM (subido en
-// el panel o con sync-rafamor.mjs): ver `mesYaCerrado`.
+// Trae cada mes (de los últimos 12) para el que RAFAMOR SQL tenga una foto
+// más nueva que la cargada: el mes en curso y los que hayan quedado parciales
+// o sin cargar, que son los que traban el cierre de un trimestre. Un mes ya
+// cerrado, o un reporte de RAFAM de la misma fecha, nunca se pisa.
 //
 // Limitaciones de esta fuente respecto del reporte completo de RAFAM
 // (src/lib/rafam-gastos.mjs):
@@ -15,15 +17,12 @@
 //    hasta que se cargue el reporte completo y lo reemplace.
 //  - El campo "programa" de RAFAMOR SQL es en realidad la categoría
 //    programática (ej. "01.17.00 - Administración de Políticas Tributarias").
-//    El programa más grueso y su nombre se derivan como se puede: "01" es
-//    siempre "Actividad Central" (convención estándar de RAFAM), y para el
-//    resto, si la única categoría de ese programa es ella misma
-//    (NN.00.00), se usa su nombre; si no, el nombre del programa queda sin
-//    completar por esta vía (lo completa cualquier mes que sí tenga el
-//    reporte completo, vía MAX() en src/lib/f17.ts).
-//  - La fuente de financiamiento llega solo con el código (ej. "110"), sin
-//    nombre: mismo criterio, queda sin completar hasta que algún mes con el
-//    reporte completo lo aporte.
+//    El nombre del programa se toma del que ya tenga la base para esa
+//    jurisdicción; si no hay, "01" es "Actividad Central" y un programa sin
+//    actividades (única categoría NN.00.00) lleva el nombre de esa categoría.
+//    Si tampoco, queda vacío y src/lib/f17.ts muestra "Programa NN".
+//  - La fuente llega solo con el código (ej. "110"): el nombre sale de la
+//    base o de FUENTE_DENOM; si no, f17.ts muestra "Fuente NNN".
 //  - La jurisdicción llega solo por nombre, sin el código RAFAM de 2 dígitos
 //    (ej. "03"): se resuelve con JURISDICCION_CODIGO_POR_NOMBRE, la misma
 //    tabla de migrations/0003_usuarios.sql. Un nombre que no está en esa
@@ -119,13 +118,27 @@ function mejorDenom(actual: string | undefined, nueva: string): string {
   return SIN_USAR_RE.test(actual) && !SIN_USAR_RE.test(nueva) ? nueva : actual;
 }
 
-/** "01" siempre es "Actividad Central"; para el resto, solo si el programa no tiene actividades (su única categoría es NN.00.00). */
-function denomPrograma(programaCodigo: string, catprogsDelPrograma: Set<string>, catprogDenom: Map<string, string>): string | null {
+/**
+ * Nombre del programa cuando la base todavía no lo tiene: "01" es "Actividad
+ * Central"; para el resto, solo si el programa no tiene actividades (su única
+ * categoría es NN.00.00, que lleva el nombre del programa).
+ */
+function denomPrograma(programaCodigo: string, catprogs: Map<string, string>): string | null {
   if (programaCodigo === "01") return "Actividad Central";
   const propio = `${programaCodigo}.00.00`;
-  if (catprogsDelPrograma.size === 1 && catprogsDelPrograma.has(propio)) return catprogDenom.get(propio) ?? null;
-  return null;
+  return catprogs.size === 1 && catprogs.has(propio) ? catprogs.get(propio)! : null;
 }
+
+/** Nombres de las fuentes como figuran en las planillas "registros f17" (RAFAMOR SQL solo da el código). */
+const FUENTE_DENOM: Record<string, string> = {
+  "110": "Tesoro municipal",
+  "131": "Afectado municipal",
+  "132": "Afectado provincial",
+  "133": "Afectado nacional",
+};
+
+/** Meses que se traen por corrida: tope de CPU y de consultas a D1 por invocación del Worker. */
+const MAX_MESES_POR_CORRIDA = 3;
 
 function ultimoDiaDelMes(anio: number, mes: number): number {
   return new Date(Date.UTC(anio, mes, 0)).getUTCDate();
@@ -143,7 +156,6 @@ interface Fila {
   jurisdiccion_codigo: string;
   jurisdiccion: string;
   catprog_codigo: string;
-  catprog: string;
   fuente_codigo: string;
   inciso: string;
   partida_codigo: string;
@@ -154,46 +166,94 @@ interface Fila {
   pagado: number;
 }
 
-export interface ResultadoSync {
+/** Nombres que ya tiene la base (de los reportes completos de RAFAM) para lo que RAFAMOR SQL no trae. */
+interface NombresCargados {
+  fuente: Map<string, string>;
+  /** Clave "jurisdiccion_codigo|programa_codigo". */
+  programa: Map<string, string>;
+}
+
+async function nombresCargados(db: D1Database): Promise<NombresCargados> {
+  const [fuentes, programas] = await db.batch<{ cod: string; denom: string }>([
+    db.prepare("SELECT fuente_codigo AS cod, MAX(fuente) AS denom FROM rafam_gastos WHERE fuente IS NOT NULL GROUP BY fuente_codigo"),
+    db.prepare(
+      `SELECT jurisdiccion_codigo || '|' || programa_codigo AS cod, MAX(programa) AS denom
+       FROM rafam_gastos WHERE programa IS NOT NULL GROUP BY jurisdiccion_codigo, programa_codigo`
+    ),
+  ]);
+  const aMapa = (r: D1Result<{ cod: string; denom: string }>) => new Map((r.results ?? []).map((x) => [x.cod, x.denom]));
+  return { fuente: aMapa(fuentes), programa: aMapa(programas) };
+}
+
+export interface MesSincronizado {
   anio: number;
   mes: number;
   hasta: string;
   filas: number;
-  /** Si no se escribió nada, por qué (no es un error: el mes ya está cerrado, o no hay datos nuevos). */
-  omitido?: string;
+  mesCompleto: boolean;
+}
+
+export interface ResultadoSync {
+  /** Meses traídos en esta corrida, el más reciente primero. */
+  meses: MesSincronizado[];
+  /** Meses que también tienen datos más nuevos en RAFAMOR SQL y quedan para la próxima corrida. */
+  pendientes: number;
+  /** Último día con datos en RAFAMOR SQL (AAAA-MM-DD). */
+  ultimoDia: string;
   jurisdiccionesOmitidas: string[];
 }
 
 /**
- * Trae de RAFAMOR SQL el mes más reciente con una foto de crédito vigente y,
- * si no está ya cerrado con un reporte de RAFAM, reemplaza esa foto en
- * `rafam_gastos`/`rafam_cortes`.
+ * Trae de RAFAMOR SQL los meses (de los últimos 12) cuya foto es más nueva
+ * que la cargada en la base: el mes en curso y cualquier mes que haya quedado
+ * parcial o sin cargar. Por eso nunca pisa un mes ya cerrado (su foto llega
+ * al último día) ni un reporte de RAFAM de la misma fecha (que además trae
+ * aprobado/modificaciones/preventivo).
  */
 export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv): Promise<ResultadoSync> {
-  const cortes = await consultarRafamorSql<[number, number, string]>(
-    "SELECT anio, mes, MAX(fecha) AS fecha FROM credito_vigente GROUP BY anio, mes ORDER BY anio DESC, mes DESC LIMIT 1",
+  const disponibles = await consultarRafamorSql<[number, number, string]>(
+    "SELECT anio, mes, MAX(fecha) AS fecha FROM credito_vigente GROUP BY anio, mes ORDER BY anio DESC, mes DESC LIMIT 12",
     env
   );
-  const [anio, mes, hasta] = cortes[0] ?? [];
-  if (!anio || !mes) {
-    return { anio: 0, mes: 0, hasta: "", filas: 0, omitido: "RAFAMOR SQL todavía no tiene ninguna foto de crédito vigente.", jurisdiccionesOmitidas: [] };
-  }
+  const ultimoDia = disponibles[0]?.[2] ?? "";
+  if (disponibles.length === 0) return { meses: [], pendientes: 0, ultimoDia, jurisdiccionesOmitidas: [] };
 
-  const corteExistente = await db
-    .prepare("SELECT mes_completo, origen FROM rafam_cortes WHERE anio = ? AND mes = ?")
-    .bind(anio, mes)
-    .first<{ mes_completo: number; origen: string }>();
-  if (corteExistente?.mes_completo && corteExistente.origen !== "rafamor_sql") {
-    return {
-      anio,
-      mes,
-      hasta,
-      filas: 0,
-      omitido: `${String(mes).padStart(2, "0")}/${anio} ya quedó cerrado con un reporte de RAFAM (${corteExistente.origen === "panel" ? "subido en el panel" : "sync-rafamor.mjs"}); no se toca.`,
-      jurisdiccionesOmitidas: [],
-    };
-  }
+  const cargados = await db
+    .prepare("SELECT anio, mes, hasta FROM rafam_cortes WHERE anio >= ?")
+    .bind(disponibles[disponibles.length - 1][0])
+    .all<{ anio: number; mes: number; hasta: string }>();
+  const hastaCargado = new Map((cargados.results ?? []).map((c) => [`${c.anio}-${c.mes}`, c.hasta]));
+  const atrasados = disponibles.filter(([anio, mes, hasta]) => {
+    const cargado = hastaCargado.get(`${anio}-${mes}`);
+    return !cargado || hasta > cargado;
+  });
 
+  const meses: MesSincronizado[] = [];
+  const jurisdiccionesOmitidas = new Set<string>();
+  if (atrasados.length > 0) {
+    const nombres = await nombresCargados(db);
+    for (const [anio, mes, hasta] of atrasados.slice(0, MAX_MESES_POR_CORRIDA)) {
+      meses.push(await sincronizarMes(db, env, anio, mes, hasta, nombres, jurisdiccionesOmitidas));
+    }
+  }
+  return {
+    meses,
+    pendientes: Math.max(0, atrasados.length - MAX_MESES_POR_CORRIDA),
+    ultimoDia,
+    jurisdiccionesOmitidas: [...jurisdiccionesOmitidas],
+  };
+}
+
+/** Reemplaza la foto de un mes en rafam_gastos/rafam_cortes con lo que tiene RAFAMOR SQL. */
+async function sincronizarMes(
+  db: D1Database,
+  env: RafamorSqlEnv,
+  anio: number,
+  mes: number,
+  hasta: string,
+  nombres: NombresCargados,
+  jurisdiccionesOmitidas: Set<string>
+): Promise<MesSincronizado> {
   const [gastos, vigentes] = await Promise.all([
     consultarRafamorSql<[string, string, string, string, string, string, number, number, number]>(
       `SELECT jurisdiccion, programa, fuente, inciso, partida_codigo, partida,
@@ -210,9 +270,10 @@ export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv):
   ]);
 
   const porClave = new Map<string, Fila>();
-  const jurisdiccionesOmitidas = new Set<string>();
+  /** "jurisdiccion|catprog" -> nombre de la categoría. */
   const catprogDenom = new Map<string, string>();
-  const catprogsPorPrograma = new Map<string, Set<string>>();
+  /** "jurisdiccion|programa" -> categorías del programa (código -> nombre). */
+  const catprogsPorPrograma = new Map<string, Map<string, string>>();
 
   const resolver = (
     jurisdiccionNombre: string,
@@ -229,19 +290,20 @@ export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv):
     }
     const catprog = parseCatprog(programaTexto);
     if (!catprog) return null;
-    catprogDenom.set(catprog.codigo, mejorDenom(catprogDenom.get(catprog.codigo), catprog.denom));
-    const programaCodigo = catprog.codigo.slice(0, 2);
-    if (!catprogsPorPrograma.has(programaCodigo)) catprogsPorPrograma.set(programaCodigo, new Set());
-    catprogsPorPrograma.get(programaCodigo)!.add(catprog.codigo);
+    const claveCatprog = `${jurisdiccionCodigo}|${catprog.codigo}`;
+    const denom = mejorDenom(catprogDenom.get(claveCatprog), catprog.denom);
+    catprogDenom.set(claveCatprog, denom);
+    const clavePrograma = `${jurisdiccionCodigo}|${catprog.codigo.slice(0, 2)}`;
+    if (!catprogsPorPrograma.has(clavePrograma)) catprogsPorPrograma.set(clavePrograma, new Map());
+    catprogsPorPrograma.get(clavePrograma)!.set(catprog.codigo, denom);
 
-    const clave = `${jurisdiccionCodigo}|${catprog.codigo}|${fuenteCodigo}|${partidaCodigo}`;
+    const clave = `${claveCatprog}|${fuenteCodigo}|${partidaCodigo}`;
     let f = porClave.get(clave);
     if (!f) {
       f = {
         jurisdiccion_codigo: jurisdiccionCodigo,
         jurisdiccion: jurisdiccionNombre,
         catprog_codigo: catprog.codigo,
-        catprog: catprog.denom,
         fuente_codigo: fuenteCodigo,
         inciso,
         partida_codigo: partidaCodigo,
@@ -269,8 +331,10 @@ export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv):
     if (f) f.vigente += vigente;
   }
 
-  const programaDenomPorCodigo = new Map<string, string | null>();
-  for (const [codigo, catprogs] of catprogsPorPrograma) programaDenomPorCodigo.set(codigo, denomPrograma(codigo, catprogs, catprogDenom));
+  const programaDenom = (jurisdiccionCodigo: string, programaCodigo: string) => {
+    const clave = `${jurisdiccionCodigo}|${programaCodigo}`;
+    return nombres.programa.get(clave) ?? denomPrograma(programaCodigo, catprogsPorPrograma.get(clave) ?? new Map());
+  };
 
   const filas = [...porClave.values()].map((f) => {
     const programaCodigo = f.catprog_codigo.slice(0, 2);
@@ -279,11 +343,12 @@ export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv):
         case "jurisdiccion_codigo": return f.jurisdiccion_codigo;
         case "jurisdiccion": return f.jurisdiccion;
         case "programa_codigo": return programaCodigo;
-        case "programa": return programaDenomPorCodigo.get(programaCodigo) ?? null;
+        case "programa": return programaDenom(f.jurisdiccion_codigo, programaCodigo);
         case "catprog_codigo": return f.catprog_codigo;
-        case "catprog": return f.catprog;
+        // Un solo nombre por categoría (sin el "(NO USAR)" si hay otro), así MAX() no elige el viejo.
+        case "catprog": return catprogDenom.get(`${f.jurisdiccion_codigo}|${f.catprog_codigo}`)!;
         case "fuente_codigo": return f.fuente_codigo;
-        case "fuente": return null; // RAFAMOR SQL no da el nombre de la fuente.
+        case "fuente": return nombres.fuente.get(f.fuente_codigo) ?? FUENTE_DENOM[f.fuente_codigo] ?? null;
         case "inciso": return f.inciso;
         case "partida_codigo": return f.partida_codigo;
         case "partida": return f.partida;
@@ -298,17 +363,13 @@ export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv):
     });
   });
 
-  if (filas.length === 0) {
-    return { anio, mes, hasta, filas: 0, omitido: "No hay filas para ninguna jurisdicción conocida en ese mes.", jurisdiccionesOmitidas: [...jurisdiccionesOmitidas] };
-  }
+  const mesCompleto = Number(hasta.slice(8)) === ultimoDiaDelMes(anio, mes);
+  if (filas.length === 0) return { anio, mes, hasta, filas: 0, mesCompleto };
 
   const extraer = COLS.map((_, i) => `json_extract(value, '$[${i}]')`).join(", ");
   const insertar = db.prepare(`INSERT INTO rafam_gastos (anio, mes, ${COLS.join(", ")}) SELECT ?1, ?2, ${extraer} FROM json_each(?3)`);
   const lotes = [];
   for (let i = 0; i < filas.length; i += 600) lotes.push(insertar.bind(anio, mes, JSON.stringify(filas.slice(i, i + 600))));
-
-  const desde = `${anio}-${String(mes).padStart(2, "0")}-01`;
-  const mesCompleto = hasta.slice(8) === String(ultimoDiaDelMes(anio, mes)).padStart(2, "0") ? 1 : 0;
 
   await db.batch([
     db.prepare("DELETE FROM rafam_gastos WHERE anio = ? AND mes = ?").bind(anio, mes),
@@ -318,8 +379,8 @@ export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv):
         `INSERT OR REPLACE INTO rafam_cortes (anio, mes, desde, hasta, mes_completo, filas, archivo, origen, cargado_en)
          VALUES (?, ?, ?, ?, ?, ?, NULL, 'rafamor_sql', datetime('now'))`
       )
-      .bind(anio, mes, desde, hasta, mesCompleto, filas.length),
+      .bind(anio, mes, `${anio}-${String(mes).padStart(2, "0")}-01`, hasta, mesCompleto ? 1 : 0, filas.length),
   ]);
 
-  return { anio, mes, hasta, filas: filas.length, jurisdiccionesOmitidas: [...jurisdiccionesOmitidas] };
+  return { anio, mes, hasta, filas: filas.length, mesCompleto };
 }

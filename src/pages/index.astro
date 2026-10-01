@@ -31,16 +31,19 @@ if (Astro.locals.usuario) return Astro.redirect(inicioDe(Astro.locals.usuario));
         </span>
         <div>
           <span class="eyebrow light">Subsecretaría de Planificación Presupuestaria y Estadística</span>
-          <h1>Formulario 17</h1>
-          <p>Prellenado para cada secretaría, con los datos de RAFAM.</p>
+          <h1>Presupuesto</h1>
+          <p>Formularios, instructivos y fechas de entrega del presupuesto municipal, con los datos de RAFAM.</p>
         </div>
         <span class="login-photo-caption">Municipio de Morón</span>
       </section>
       <section class="login-form-panel">
         <div class="login-form-wrap">
           <span class="eyebrow">Bienvenido / Bienvenida</span>
-          <h2>Formulario<br />17.</h2>
-          <p class="login-intro">Ingresá con el usuario de tu secretaría para ver el F17 prellenado de tus programas, los instructivos y las fechas de entrega.</p>
+          <h2>Presupuesto.</h2>
+          <p class="login-intro">
+            Ingresá con el usuario de tu secretaría para ver el Formulario 17 prellenado de tus programas, el Formulario 7, los
+            instructivos y las fechas de entrega.
+          </p>
 
           {salida && !error && <div class="alert alert-success">Cerraste la sesión.</div>}
           {error === "invalido" && <div class="alert alert-error">Usuario o contraseña incorrectos.</div>}

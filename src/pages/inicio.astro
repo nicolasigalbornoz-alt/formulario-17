@@ -14,13 +14,21 @@ const ACCESOS = [
   },
   {
     n: "02",
+    tag: "Formulación",
+    title: "Formulario 7",
+    text: "Carga del Formulario 7, en su propio sitio (se abre en otra pestaña).",
+    href: "https://formulario7.moron-presupuesto.workers.dev/",
+    externo: true,
+  },
+  {
+    n: "03",
     tag: "Guías paso a paso",
     title: "Instructivos",
     text: "Presupuesto por Programas, formularios de formulación, trimestrales y ejecutado de gastos.",
     href: "/instructivos",
   },
   {
-    n: "03",
+    n: "04",
     tag: "Novedades y vencimientos",
     title: "Lista de difusión",
     text: "Recibí información de Presupuesto y recordatorios de las fechas de entrega de formularios.",
@@ -41,10 +49,10 @@ try {
     <section class="municipal-hero">
       <div class="hero-content">
         <span class="eyebrow light">Municipio de Morón · Subsecretaría de Planificación Presupuestaria y Estadística</span>
-        <h1>Formulario 17</h1>
+        <h1>Presupuesto</h1>
         <p>
-          Descargá el Formulario 17 prellenado, consultá los instructivos y las fechas de entrega de cada
-          formulario.
+          Los formularios de presupuesto de cada secretaría (el Formulario 17 prellenado y el Formulario 7), los instructivos y
+          las fechas de entrega.
         </p>
         <a class="btn btn-primary hero-button" href="/formulario-17">Consultar Formulario 17 <span aria-hidden="true">→</span></a>
       </div>
@@ -60,10 +68,10 @@ try {
         <h2>¿Qué querés consultar?</h2>
         <span class="heading-rule"></span>
       </div>
-      <div class="service-grid">
+      <div class="service-grid cuatro">
         {
           ACCESOS.map((a) => (
-            <a class="service-card" href={a.href}>
+            <a class="service-card" href={a.href} target={a.externo ? "_blank" : undefined} rel={a.externo ? "noopener" : undefined}>
               <div class="service-card-top">
                 <span class="service-number">{a.n}</span>
                 <span class="service-arrow" aria-hidden="true">↗</span>

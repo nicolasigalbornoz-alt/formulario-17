@@ -70,9 +70,9 @@ function wrangler(extra) {
 function cortesCargados() {
   if (soloSql || forzar) return new Map();
   try {
-    const out = wrangler(["--json", "--command", "SELECT anio, mes, hasta FROM rafam_cortes"]);
+    const out = wrangler(["--json", "--command", "SELECT anio, mes, hasta, origen FROM rafam_cortes"]);
     const json = JSON.parse(out.slice(out.indexOf("[")));
-    return new Map((json[0]?.results ?? []).map((r) => [`${r.anio}-${r.mes}`, r.hasta]));
+    return new Map((json[0]?.results ?? []).map((r) => [`${r.anio}-${r.mes}`, r]));
   } catch (e) {
     console.warn("No pude leer rafam_cortes (¿falta aplicar las migraciones?). Se cargan todos los meses.\n", e.message);
     return new Map();
@@ -148,8 +148,12 @@ function main() {
     const { anio, mes, hasta } = reporte.periodo;
     const etiqueta = `${anio}-${String(mes).padStart(2, "0")} (al ${hasta})`;
 
-    if (cargados.get(`${anio}-${mes}`) === hasta) {
-      console.log(`= ${etiqueta}: ya estaba cargado`);
+    // No volver atrás: la base puede tener una foto más nueva (del sync con
+    // RAFAMOR SQL). A igual fecha, el reporte completo reemplaza a la de
+    // RAFAMOR SQL porque trae además aprobado/modificaciones/preventivo.
+    const previo = cargados.get(`${anio}-${mes}`);
+    if (previo && (previo.hasta > hasta || (previo.hasta === hasta && previo.origen !== "rafamor_sql"))) {
+      console.log(`= ${etiqueta}: ${previo.hasta === hasta ? "ya estaba cargado" : `la base ya tiene datos más nuevos (al ${previo.hasta})`}`);
       continue;
     }
     for (const a of reporte.avisos) console.warn(`  ! ${a}`);
