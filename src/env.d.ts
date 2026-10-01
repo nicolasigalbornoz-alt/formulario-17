@@ -28,4 +28,7 @@ interface Env {
   MAIL_TOKEN?: string;
   RESEND_API_KEY?: string;
   MAIL_FROM?: string;
+  /** Token de servicio de Cloudflare Access para RAFAMOR SQL (ver src/lib/sync-rafamor-sql.ts). */
+  RAFAMOR_CF_CLIENT_ID?: string;
+  RAFAMOR_CF_CLIENT_SECRET?: string;
 }

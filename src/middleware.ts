@@ -5,7 +5,16 @@ import { SESSION_COOKIE, inicioDe, usuarioDeSesion } from "./lib/auth";
 // sitio: ninguna otra página se ve sin usuario. Quedan abiertos solo el
 // ingreso, la baja de la lista de difusión (el enlace de los mails) y la tarea
 // programada de alertas (que se valida con su propio token).
-const PUBLICAS = new Set(["/", "/ingresar", "/api/auth/ingresar", "/api/auth/salir", "/api/cron/alertas", "/lista-de-difusion/baja", "/api/mailing/unsubscribe"]);
+const PUBLICAS = new Set([
+  "/",
+  "/ingresar",
+  "/api/auth/ingresar",
+  "/api/auth/salir",
+  "/api/cron/alertas",
+  "/api/cron/sync-rafamor",
+  "/lista-de-difusion/baja",
+  "/api/mailing/unsubscribe",
+]);
 
 /** Solo para administradores: el inicio y el panel. */
 const soloAdmin = (pathname: string, ruta: string) => ruta === "/inicio" || pathname.startsWith("/admin") || pathname.startsWith("/api/admin");
