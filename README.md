@@ -179,6 +179,16 @@ aprobado/modificaciones/preventivo). Un mes ya cerrado no se pisa nunca.
   quedado parciales o sin cargar (hasta 3 por corrida). Así se cierran solos
   los trimestres y se habilita el siguiente en el F17. Ver
   `src/lib/sync-rafamor-sql.ts` para el detalle y sus límites:
+  - **RAFAMOR SQL tiene el error del parser de RAFAMOR de abajo (1)**: no
+    tiene ningún programa sin actividades (NN.00.00) y los suma a la
+    categoría anterior. Verificado: Control Comunal 01.18.00 en RAFAMOR SQL a
+    junio/2026 = 01.18.00 + 17.00.00 de la planilla "registros f17"
+    ($1.012.164.037). Afecta a unas 6 jurisdicciones con 11 programas así.
+    Por eso, si el mes que se reemplaza tiene alguno de esos programas para
+    una jurisdicción, esa jurisdicción conserva su foto anterior (el reporte
+    de RAFAM) y el resto se actualiza. El mes se vuelve a revisar en cada
+    corrida: cuando RAFAMOR SQL se regenere con el parser corregido, se
+    reemplaza solo.
   - No trae `aprobado`/`modificaciones`/`preventivo` (esa API no los tiene):
     quedan en 0 hasta que un reporte completo (manual o `sync-rafamor.mjs`)
     reemplace la foto de ese mes. El "disponible" de un mes solo sincronizado
