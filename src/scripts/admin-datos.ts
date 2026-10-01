@@ -86,3 +86,56 @@ export function iniciarSubidaRafam() {
     }
   });
 }
+
+interface ResultadoSync {
+  anio: number;
+  mes: number;
+  hasta: string;
+  filas: number;
+  omitido?: string;
+  jurisdiccionesOmitidas: string[];
+  error?: string;
+}
+
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+
+export function iniciarSyncRafamor() {
+  const boton = document.querySelector<HTMLButtonElement>("#sync-rafamor-boton");
+  const vista = document.querySelector<HTMLDivElement>("#sync-rafamor-resultado");
+  if (!boton || !vista) return;
+
+  const mostrar = (clase: string, html: string) => {
+    vista.hidden = false;
+    vista.className = `alert ${clase}`;
+    vista.innerHTML = html;
+  };
+
+  boton.addEventListener("click", async () => {
+    boton.disabled = true;
+    boton.textContent = "Sincronizando…";
+    mostrar("alert-warning", "Consultando RAFAMOR SQL…");
+    try {
+      const res = await fetch("/api/admin/sync-rafamor", { method: "POST" });
+      const r = (await res.json()) as ResultadoSync;
+      if (!res.ok || r.error) throw new Error(r.error ?? `Error ${res.status}`);
+      const mesTxt = r.mes ? `${MESES[r.mes - 1]} de ${r.anio}` : "";
+      if (r.omitido) {
+        mostrar("alert-warning", r.omitido);
+      } else {
+        mostrar(
+          "alert-success",
+          `<strong>${mesTxt}</strong> actualizado al ${r.hasta.split("-").reverse().join("/")}: ${r.filas.toLocaleString("es-AR")} partidas.` +
+            (r.jurisdiccionesOmitidas.length
+              ? `<br><small>Sin código de jurisdicción, no se sincronizaron: ${r.jurisdiccionesOmitidas.join(", ")}.</small>`
+              : "")
+        );
+      }
+      setTimeout(() => location.reload(), r.omitido ? 0 : 1500);
+    } catch (err) {
+      mostrar("alert-error", `No se pudo sincronizar: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      boton.disabled = false;
+      boton.textContent = "Sincronizar ahora";
+    }
+  });
+}

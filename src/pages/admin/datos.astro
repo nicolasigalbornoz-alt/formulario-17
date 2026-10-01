@@ -58,7 +58,9 @@ const q = Astro.url.searchParams;
                     <td style="font-size:12px; color:#666;">
                       {c.archivo}
                       <br />
-                      <span class="badge badge-muted">{c.origen === "panel" ? "subido en el panel" : "sincronizado desde RAFAMOR"}</span>
+                      <span class="badge badge-muted">
+                        {c.origen === "panel" ? "subido en el panel" : c.origen === "rafamor_sql" ? "sincronizado desde RAFAMOR SQL" : "sync-rafamor.mjs (PC de RAFAMOR)"}
+                      </span>
                     </td>
                     <td style="white-space:nowrap; font-size:13px;">{c.cargado_en.slice(0, 16).replace("T", " ")}</td>
                   </tr>
@@ -86,18 +88,23 @@ const q = Astro.url.searchParams;
           <button class="btn btn-primary" type="submit" disabled>Cargar</button>
         </div>
       </form>
-      <div class="card">
+      <div class="card" id="sync-rafamor">
         <span class="eyebrow">Carga automática</span>
         <p class="card-intro">
-          El pipeline de RAFAMOR baja estos reportes todos los días. Para pasarlos a la base del sitio, en la PC donde corre
-          RAFAMOR: <code>node scripts/sync-rafamor.mjs --remote</code> (ver README).
+          El mes en curso se trae solo, cada 4 horas, desde RAFAMOR SQL (la base en la nube que actualiza RAFAMOR). Nunca pisa un
+          mes que ya quedó cerrado con un reporte de RAFAM subido acá o con <code>sync-rafamor.mjs</code>.
         </p>
+        <div id="sync-rafamor-resultado" class="alert alert-warning" hidden></div>
+        <div class="form-actions" style="justify-content:flex-start;">
+          <button class="btn btn-secondary" type="button" id="sync-rafamor-boton">Sincronizar ahora</button>
+        </div>
       </div>
     </aside>
   </div>
 </Base>
 
 <script>
-  import { iniciarSubidaRafam } from "../../scripts/admin-datos";
+  import { iniciarSubidaRafam, iniciarSyncRafamor } from "../../scripts/admin-datos";
   iniciarSubidaRafam();
+  iniciarSyncRafamor();
 </script>

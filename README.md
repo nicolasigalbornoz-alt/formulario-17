@@ -165,29 +165,46 @@ arreglar también allá:
    quedan sin código de jurisdicción (acá se toma del código RAFAM:
    `1110109000` → 09).
 
-Hay dos formas de cargar los datos:
+Hay tres formas de cargar los datos. Las tres escriben la misma tabla, así
+que convivir no rompe nada: la foto de un mes ya cerrado con un reporte
+completo de RAFAM (manual o `sync-rafamor.mjs`) nunca se pisa.
 
-- **Automática** (recomendada), en la PC donde corre RAFAMOR:
-  ```bash
-  node scripts/sync-rafamor.mjs --remote
-  ```
-  Busca en `..\Flujos semanales\Flujos semanales\ejecutados_AAAA\gastos_mensual\`
-  (o `--dir=...` / variable `RAFAMOR_DIR`) el reporte más nuevo de cada mes
-  y carga solo los meses que cambiaron. `scripts\sync-rafamor.bat` hace lo
-  mismo con log en `logs\`, para programarlo en el Programador de tareas de
-  Windows después de la corrida diaria de RAFAMOR. Necesita credenciales de
-  Cloudflare: `npx wrangler login` una vez, o la variable
-  `CLOUDFLARE_API_TOKEN` con permiso de edición sobre D1.
+- **Automática en la nube** (la que corre siempre, sin depender de ninguna
+  PC): cada 4 horas, una tarea programada del Worker (`wrangler.toml` →
+  `[triggers]`, `worker/index.mjs`) consulta **RAFAMOR SQL**
+  (`https://rafamor-sql.pages.dev`, la base de lectura que regenera RAFAMOR a
+  diario con lo que baja de RAFAM) y reemplaza la foto del mes en curso. Ver
+  `src/lib/sync-rafamor-sql.ts` para el detalle y sus límites:
+  - No trae `aprobado`/`modificaciones`/`preventivo` (esa API no los tiene):
+    quedan en 0 hasta que un reporte completo (manual o `sync-rafamor.mjs`)
+    reemplace la foto de ese mes. El "disponible" de un mes solo sincronizado
+    por esta vía, entonces, no resta preventivo.
+  - La jurisdicción llega solo por nombre; se resuelve contra la tabla de
+    `migrations/0003_usuarios.sql` (`JURISDICCION_CODIGO_POR_NOMBRE`). Una
+    jurisdicción nueva que no esté ahí se omite (avisado en el resultado del
+    botón "Sincronizar ahora" del panel → Datos de RAFAM).
+  - El nombre del programa (más grueso que la categoría programática, que es
+    lo único que da esta API) solo se completa para "Actividad Central" (01)
+    y para programas sin sub-actividades; el resto queda sin nombre hasta que
+    algún mes con el reporte completo lo aporte.
+  - Necesita los secrets `RAFAMOR_CF_CLIENT_ID` / `RAFAMOR_CF_CLIENT_SECRET`
+    (el token de servicio de Cloudflare Access que entrega quien administra
+    RAFAMOR). Sin ellos, el sync queda inactivo (no rompe nada, solo no
+    corre). Desde el panel se puede disparar a mano con "Sincronizar ahora".
 - **Descarga + carga diaria en una PC con RAFAM** (la que usa la
   Subsecretaría): la tarea programada *F17 - Descargar RAFAM y sincronizar*
   corre `scripts\rafam-diario.ps1` de lunes a viernes a las 07:45. Baja de
   RAFAM los reportes mensuales de gastos con el bot de RAFAMOR
-  (`rafam_ejecutado_bg.py --periodo mes --tipo gastos`) y después corre la
-  sincronización. El usuario y la clave de RAFAM se cargan una vez con
-  `scripts\guardar-credencial-rafam.bat` (doble clic) y quedan cifrados con la
-  cuenta de Windows (`%APPDATA%\formulario-17\rafam-credencial.xml`). Log en
+  (`rafam_ejecutado_bg.py --periodo mes --tipo gastos`) y después corre
+  `node scripts/sync-rafamor.mjs --remote` (necesita credenciales de
+  Cloudflare: `npx wrangler login` una vez, o la variable
+  `CLOUDFLARE_API_TOKEN` con permiso de edición sobre D1). El usuario y la
+  clave de RAFAM se cargan una vez con `scripts\guardar-credencial-rafam.bat`
+  (doble clic) y quedan cifrados con la cuenta de Windows
+  (`%APPDATA%\formulario-17\rafam-credencial.xml`). Log en
   `logs\rafam-diario.log`. **El bot cierra cualquier Contabilidad.exe abierto
-  al arrancar.**
+  al arrancar.** A diferencia del sync en la nube, trae el reporte completo
+  (con aprobado/modificaciones/preventivo).
 - **Manual**, desde el panel → Datos de RAFAM: subir el `.xls` exportado de
   RAFAM (del día 1 al último día del mes, o hasta hoy). Se interpreta en el
   navegador y reemplaza la foto de ese mes.
@@ -247,7 +264,8 @@ el deploy borre las variables cargadas en el dashboard).
 
 ```
 migrations/                 esquema D1 (0002 = datos de RAFAM + lista de difusión)
-scripts/sync-rafamor.mjs    RAFAMOR (.xls de RAFAM) -> D1
+scripts/sync-rafamor.mjs    RAFAMOR (.xls de RAFAM) -> D1, corrido a mano o en la PC de RAFAMOR
+src/lib/sync-rafamor-sql.ts sync automático en la nube: RAFAMOR SQL -> D1 (tarea programada)
 scripts/mail_apps_script.gs Web App de Google para mandar los avisos
 src/lib/rafam-gastos.mjs    parser del reporte de gastos de RAFAM (Node, Worker y navegador)
 src/lib/f17.ts              lógica del F17
@@ -268,7 +286,9 @@ public/                     logo, foto y tipografías institucionales
   borrarlos y volver a crearlos desde el sitio (el sitio ya se publica como
   «Subsecretaría de Planificación Presupuestaria y Estadística»).
 - Definir y configurar el proveedor de mail (ver "Envío de mails").
-- Programar `scripts\sync-rafamor.bat` en la PC de RAFAMOR.
+- Cargar los secrets `RAFAMOR_CF_CLIENT_ID` / `RAFAMOR_CF_CLIENT_SECRET` en
+  el dashboard (Workers → formulario-17 → Settings → Variables and Secrets,
+  tipo **Secret**) para activar el sync automático con RAFAMOR SQL.
 - Pasar los suscriptos actuales del formulario de Google: exportar sus
   respuestas y cargarlas (o pedirles que se vuelvan a inscribir).
 - Las tipografías Neo Sans son las del sistema de Gestión Documental del

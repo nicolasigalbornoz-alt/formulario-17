@@ -6,6 +6,11 @@ ADMIN_PASSWORD_HASH=
 # Cualquier string largo y aleatorio.
 SESSION_SECRET=
 
+# Opcional: sincronización automática del mes en curso desde RAFAMOR SQL
+# (ver README, "Sincronización automática desde RAFAMOR SQL").
+# RAFAMOR_CF_CLIENT_ID=xxxxxxxx.access
+# RAFAMOR_CF_CLIENT_SECRET=cfast_xxxxxxxx
+
 # Opcional: envío de avisos (ver README, "Envío de mails").
 # MAIL_PROVIDER=apps_script
 # MAIL_APPS_SCRIPT_URL=https://script.google.com/macros/s/.../exec
