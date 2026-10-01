@@ -17,7 +17,7 @@ const catalogo: Catalogo = {};
 if (corte) {
   const filtro = usuario.jurisdicciones ? `AND jurisdiccion_codigo IN (${usuario.jurisdicciones.map(() => "?").join(",") || "''"})` : "";
   const filas = await sql.all<{ j: string; jd: string; p: string; pd: string; c: string; cd: string; f: string }>(
-    `SELECT jurisdiccion_codigo AS j, MAX(jurisdiccion) AS jd, programa_codigo AS p, MAX(programa) AS pd,
+    `SELECT jurisdiccion_codigo AS j, MAX(jurisdiccion) AS jd, programa_codigo AS p, COALESCE(MAX(programa), 'Programa ' || programa_codigo) AS pd,
             catprog_codigo AS c, MAX(catprog) AS cd, fuente_codigo AS f
      FROM rafam_gastos WHERE anio = ? AND (vigente <> 0 OR compromiso <> 0) ${filtro}
      GROUP BY jurisdiccion_codigo, programa_codigo, catprog_codigo, fuente_codigo`,

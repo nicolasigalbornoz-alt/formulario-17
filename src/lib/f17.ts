@@ -151,6 +151,11 @@ export const trimestreDeMes = (mes: number) => Math.floor((mes - 1) / 3) + 1;
 // Listas para los filtros (año en curso, solo lo que tiene crédito o gasto)
 
 const CON_MOVIMIENTO = "(vigente <> 0 OR compromiso <> 0)";
+// Los meses que entran desde RAFAMOR SQL (src/lib/sync-rafamor-sql.ts) pueden
+// no traer el nombre del programa o de la fuente: MAX() toma el de cualquier
+// otro mes que lo tenga, y si no hay ninguno se muestra el código.
+const DENOM_PROGRAMA = "COALESCE(MAX(programa), 'Programa ' || programa_codigo)";
+const DENOM_FUENTE = "COALESCE(MAX(fuente), 'Fuente ' || fuente_codigo)";
 
 export async function listJurisdicciones(sql: Sql, corte: Corte): Promise<CodDenom[]> {
   return sql.all<CodDenom>(
@@ -163,7 +168,7 @@ export async function listJurisdicciones(sql: Sql, corte: Corte): Promise<CodDen
 
 export async function listProgramas(sql: Sql, corte: Corte, jurisdiccion: string): Promise<CodDenom[]> {
   return sql.all<CodDenom>(
-    `SELECT programa_codigo AS cod, MAX(programa) AS denom
+    `SELECT programa_codigo AS cod, ${DENOM_PROGRAMA} AS denom
      FROM rafam_gastos WHERE anio = ? AND jurisdiccion_codigo = ? AND ${CON_MOVIMIENTO}
      GROUP BY programa_codigo ORDER BY programa_codigo`,
     corte.anio,
@@ -189,7 +194,7 @@ export interface CategoriaConPrograma extends CodDenom {
 /** Todas las categorías programáticas de una jurisdicción, con su programa (carril "por categoría"). */
 export async function listCategoriasJurisdiccion(sql: Sql, corte: Corte, jurisdiccion: string): Promise<CategoriaConPrograma[]> {
   const rows = await sql.all<{ cod: string; denom: string; programa_cod: string; programa_denom: string }>(
-    `SELECT catprog_codigo AS cod, MAX(catprog) AS denom, programa_codigo AS programa_cod, MAX(programa) AS programa_denom
+    `SELECT catprog_codigo AS cod, MAX(catprog) AS denom, programa_codigo AS programa_cod, ${DENOM_PROGRAMA} AS programa_denom
      FROM rafam_gastos WHERE anio = ? AND jurisdiccion_codigo = ? AND ${CON_MOVIMIENTO}
      GROUP BY catprog_codigo, programa_codigo ORDER BY catprog_codigo`,
     corte.anio,
@@ -206,7 +211,7 @@ export async function listFuentes(
   catprog?: string | null
 ): Promise<CodDenom[]> {
   return sql.all<CodDenom>(
-    `SELECT fuente_codigo AS cod, MAX(fuente) AS denom
+    `SELECT fuente_codigo AS cod, ${DENOM_FUENTE} AS denom
      FROM rafam_gastos
      WHERE anio = ? AND jurisdiccion_codigo = ? AND programa_codigo = ? AND (? IS NULL OR catprog_codigo = ?)
        AND ${CON_MOVIMIENTO}
@@ -226,7 +231,7 @@ interface FilaActual {
   catprog_codigo: string;
   catprog: string;
   fuente_codigo: string;
-  fuente: string;
+  fuente: string | null;
   partida_codigo: string;
   partida: string;
   trim: number;
@@ -286,32 +291,33 @@ export async function getDatosPrograma(
       programa
     ),
     sql.all<{ jurisdiccion: string; programa: string }>(
-      `SELECT MAX(jurisdiccion) AS jurisdiccion, MAX(programa) AS programa
+      `SELECT MAX(jurisdiccion) AS jurisdiccion, ${DENOM_PROGRAMA} AS programa
        FROM rafam_gastos WHERE anio = ? AND jurisdiccion_codigo = ? AND programa_codigo = ?`,
       corte.anio,
       jurisdiccion,
       programa
     ),
   ]);
-  if (actual.length === 0 || !nombres[0]?.programa) return null;
+  if (actual.length === 0) return null;
 
   const categorias = new Map<string, string>();
-  const fuentes = new Map<string, string>();
+  const fuentes = new Map<string, string | null>();
   for (const r of actual) {
     if (r.vigente === 0 && r.compromiso === 0) continue;
     categorias.set(r.catprog_codigo, r.catprog);
-    fuentes.set(r.fuente_codigo, r.fuente);
+    // Un trimestre sin nombre de fuente (meses de RAFAMOR SQL) no pisa el de otro que sí lo tiene.
+    if (r.fuente || !fuentes.has(r.fuente_codigo)) fuentes.set(r.fuente_codigo, r.fuente);
   }
-  const ordenar = (m: Map<string, string>) =>
-    [...m].map(([cod, denom]) => ({ cod, denom })).sort((a, b) => a.cod.localeCompare(b.cod));
+  const ordenar = (m: Map<string, string | null>, sinNombre: string) =>
+    [...m].map(([cod, denom]) => ({ cod, denom: denom || `${sinNombre} ${cod}` })).sort((a, b) => a.cod.localeCompare(b.cod));
 
   return {
     corte,
     trimestre: trimestreAProgramar(corte),
-    jurisdiccion: { cod: jurisdiccion, denom: nombres[0].jurisdiccion },
-    programa: { cod: programa, denom: nombres[0].programa },
-    categorias: ordenar(categorias),
-    fuentes: ordenar(fuentes),
+    jurisdiccion: { cod: jurisdiccion, denom: nombres[0]?.jurisdiccion ?? jurisdiccion },
+    programa: { cod: programa, denom: nombres[0]?.programa ?? `Programa ${programa}` },
+    categorias: ordenar(categorias, "Categoría"),
+    fuentes: ordenar(fuentes, "Fuente"),
     actual,
     anterior,
   };
