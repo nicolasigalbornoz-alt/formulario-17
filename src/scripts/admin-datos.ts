@@ -88,7 +88,7 @@ export function iniciarSubidaRafam() {
 }
 
 interface ResultadoSync {
-  meses: { anio: number; mes: number; hasta: string; filas: number; mesCompleto: boolean }[];
+  meses: { anio: number; mes: number; hasta: string; filas: number; mesCompleto: boolean; conservadas: string[] }[];
   pendientes: number;
   ultimoDia: string;
   jurisdiccionesOmitidas: string[];
@@ -126,7 +126,11 @@ export function iniciarSyncRafamor() {
         .map(
           (m) =>
             `<li><strong>${MESES[m.mes - 1]} de ${m.anio}</strong> al ${fecha(m.hasta)}${m.mesCompleto ? " (mes completo)" : " (parcial)"}: ` +
-            `${m.filas.toLocaleString("es-AR")} partidas</li>`
+            `${m.filas.toLocaleString("es-AR")} partidas` +
+            (m.conservadas.length
+              ? `<br><small>Se mantuvo la foto anterior de ${m.conservadas.join(", ")}: RAFAMOR SQL todavía no separa sus programas sin actividades.</small>`
+              : "") +
+            `</li>`
         )
         .join("");
       mostrar(

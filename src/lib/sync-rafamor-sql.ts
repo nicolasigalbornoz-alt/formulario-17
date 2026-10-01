@@ -10,6 +10,10 @@
 // o sin cargar, que son los que traban el cierre de un trimestre. Un mes ya
 // cerrado, o un reporte de RAFAM de la misma fecha, nunca se pisa.
 //
+// RAFAMOR SQL suma los programas sin actividades (NN.00.00) a la categoría
+// anterior: una jurisdicción que los tenga conserva su foto anterior de ese
+// mes hasta que RAFAMOR SQL los traiga (ver `jurisdiccionesAConservar`).
+//
 // Limitaciones de esta fuente respecto del reporte completo de RAFAM
 // (src/lib/rafam-gastos.mjs):
 //  - No tiene aprobado/modificaciones/preventivo (quedan en 0 en las filas
@@ -140,6 +144,13 @@ const FUENTE_DENOM: Record<string, string> = {
 /** Meses que se traen por corrida: tope de CPU y de consultas a D1 por invocación del Worker. */
 const MAX_MESES_POR_CORRIDA = 3;
 
+/**
+ * Marca en rafam_cortes.archivo de un mes en el que algunas jurisdicciones
+ * conservaron su foto anterior (ver `jurisdiccionesAConservar`): ese mes se
+ * vuelve a revisar en cada corrida hasta que RAFAMOR SQL traiga sus programas.
+ */
+const CONSERVADAS = "RAFAMOR SQL no separa sus programas sin actividades; se mantuvo la foto anterior de las jurisdicciones ";
+
 function ultimoDiaDelMes(anio: number, mes: number): number {
   return new Date(Date.UTC(anio, mes, 0)).getUTCDate();
 }
@@ -191,6 +202,8 @@ export interface MesSincronizado {
   hasta: string;
   filas: number;
   mesCompleto: boolean;
+  /** Jurisdicciones que conservaron la foto anterior de ese mes (nombres). */
+  conservadas: string[];
 }
 
 export interface ResultadoSync {
@@ -219,14 +232,20 @@ export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv):
   if (disponibles.length === 0) return { meses: [], pendientes: 0, ultimoDia, jurisdiccionesOmitidas: [] };
 
   const cargados = await db
-    .prepare("SELECT anio, mes, hasta FROM rafam_cortes WHERE anio >= ?")
+    .prepare("SELECT anio, mes, hasta, origen, archivo FROM rafam_cortes WHERE anio >= ?")
     .bind(disponibles[disponibles.length - 1][0])
-    .all<{ anio: number; mes: number; hasta: string }>();
-  const hastaCargado = new Map((cargados.results ?? []).map((c) => [`${c.anio}-${c.mes}`, c.hasta]));
-  const atrasados = disponibles.filter(([anio, mes, hasta]) => {
-    const cargado = hastaCargado.get(`${anio}-${mes}`);
-    return !cargado || hasta > cargado;
+    .all<{ anio: number; mes: number; hasta: string; origen: string; archivo: string | null }>();
+  const cargado = new Map((cargados.results ?? []).map((c) => [`${c.anio}-${c.mes}`, c]));
+  const nuevos = disponibles.filter(([anio, mes, hasta]) => {
+    const c = cargado.get(`${anio}-${mes}`);
+    return !c || hasta > c.hasta;
   });
+  // Primero los datos nuevos; después, volver a probar los meses con jurisdicciones conservadas.
+  const reintentos = disponibles.filter(([anio, mes, hasta]) => {
+    const c = cargado.get(`${anio}-${mes}`);
+    return c && hasta === c.hasta && c.origen === "rafamor_sql" && (c.archivo ?? "").startsWith(CONSERVADAS);
+  });
+  const atrasados = [...nuevos, ...reintentos];
 
   const meses: MesSincronizado[] = [];
   const jurisdiccionesOmitidas = new Set<string>();
@@ -238,7 +257,7 @@ export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv):
   }
   return {
     meses,
-    pendientes: Math.max(0, atrasados.length - MAX_MESES_POR_CORRIDA),
+    pendientes: Math.max(0, nuevos.length - MAX_MESES_POR_CORRIDA),
     ultimoDia,
     jurisdiccionesOmitidas: [...jurisdiccionesOmitidas],
   };
@@ -364,23 +383,69 @@ async function sincronizarMes(
   });
 
   const mesCompleto = Number(hasta.slice(8)) === ultimoDiaDelMes(anio, mes);
-  if (filas.length === 0) return { anio, mes, hasta, filas: 0, mesCompleto };
+
+  const { conservar, filasConservadas } = await jurisdiccionesAConservar(db, anio, mes, porClave.values());
+  const aEscribir = filas.filter((f) => !conservar.has(f[0] as string));
+  const nombre = new Map([...porClave.values()].map((f) => [f.jurisdiccion_codigo, f.jurisdiccion]));
+  const conservadas = [...conservar].sort().map((j) => nombre.get(j) ?? j);
+  if (aEscribir.length === 0) return { anio, mes, hasta, filas: 0, mesCompleto, conservadas };
 
   const extraer = COLS.map((_, i) => `json_extract(value, '$[${i}]')`).join(", ");
   const insertar = db.prepare(`INSERT INTO rafam_gastos (anio, mes, ${COLS.join(", ")}) SELECT ?1, ?2, ${extraer} FROM json_each(?3)`);
   const lotes = [];
-  for (let i = 0; i < filas.length; i += 600) lotes.push(insertar.bind(anio, mes, JSON.stringify(filas.slice(i, i + 600))));
+  for (let i = 0; i < aEscribir.length; i += 600) lotes.push(insertar.bind(anio, mes, JSON.stringify(aEscribir.slice(i, i + 600))));
+
+  const borrar = conservar.size
+    ? db
+        .prepare(`DELETE FROM rafam_gastos WHERE anio = ? AND mes = ? AND jurisdiccion_codigo NOT IN (${[...conservar].map(() => "?").join(",")})`)
+        .bind(anio, mes, ...conservar)
+    : db.prepare("DELETE FROM rafam_gastos WHERE anio = ? AND mes = ?").bind(anio, mes);
 
   await db.batch([
-    db.prepare("DELETE FROM rafam_gastos WHERE anio = ? AND mes = ?").bind(anio, mes),
+    borrar,
     ...lotes,
     db
       .prepare(
         `INSERT OR REPLACE INTO rafam_cortes (anio, mes, desde, hasta, mes_completo, filas, archivo, origen, cargado_en)
-         VALUES (?, ?, ?, ?, ?, ?, NULL, 'rafamor_sql', datetime('now'))`
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'rafamor_sql', datetime('now'))`
       )
-      .bind(anio, mes, `${anio}-${String(mes).padStart(2, "0")}-01`, hasta, mesCompleto ? 1 : 0, filas.length),
+      .bind(
+        anio,
+        mes,
+        `${anio}-${String(mes).padStart(2, "0")}-01`,
+        hasta,
+        mesCompleto ? 1 : 0,
+        aEscribir.length + filasConservadas,
+        conservar.size ? `${CONSERVADAS}${[...conservar].sort().join(", ")}` : null
+      ),
   ]);
 
-  return { anio, mes, hasta, filas: filas.length, mesCompleto };
+  return { anio, mes, hasta, filas: aEscribir.length, mesCompleto, conservadas };
+}
+
+/**
+ * RAFAMOR SQL no reconoce los programas sin actividades (categoría NN.00.00,
+ * ej. el 17 de Control Comunal) y los suma a la categoría anterior: es el
+ * mismo error del parser de RAFAMOR que corrige src/lib/rafam-gastos.mjs.
+ * Si la foto que se va a reemplazar tiene alguno de esos programas para una
+ * jurisdicción y RAFAMOR SQL no lo trae, esa jurisdicción conserva su foto
+ * anterior (un reporte de RAFAM), en vez de quedar con los programas mezclados.
+ */
+async function jurisdiccionesAConservar(
+  db: D1Database,
+  anio: number,
+  mes: number,
+  filasRafamor: Iterable<Fila>
+): Promise<{ conservar: Set<string>; filasConservadas: number }> {
+  const [sinActividades, porJurisdiccion] = await db.batch<{ j: string; c?: string; n?: number }>([
+    db
+      .prepare("SELECT DISTINCT jurisdiccion_codigo AS j, catprog_codigo AS c FROM rafam_gastos WHERE anio = ? AND mes = ? AND catprog_codigo LIKE '__.00.00'")
+      .bind(anio, mes),
+    db.prepare("SELECT jurisdiccion_codigo AS j, COUNT(*) AS n FROM rafam_gastos WHERE anio = ? AND mes = ? GROUP BY jurisdiccion_codigo").bind(anio, mes),
+  ]);
+  const enRafamor = new Set([...filasRafamor].map((f) => `${f.jurisdiccion_codigo}|${f.catprog_codigo}`));
+  const conservar = new Set<string>();
+  for (const r of sinActividades.results ?? []) if (!enRafamor.has(`${r.j}|${r.c}`)) conservar.add(r.j);
+  const filasConservadas = (porJurisdiccion.results ?? []).filter((r) => conservar.has(r.j)).reduce((a, r) => a + (r.n ?? 0), 0);
+  return { conservar, filasConservadas };
 }
