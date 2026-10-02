@@ -92,6 +92,7 @@ interface ResultadoSync {
   pendientes: number;
   ultimoDia: string;
   jurisdiccionesOmitidas: string[];
+  aviso?: string;
   error?: string;
 }
 
@@ -116,10 +117,21 @@ export function iniciarSyncRafamor() {
     mostrar("alert-warning", "Consultando RAFAMOR SQL…");
     try {
       const res = await fetch("/api/admin/sync-rafamor", { method: "POST" });
-      const r = (await res.json()) as ResultadoSync;
+      const texto = await res.text();
+      let r: ResultadoSync;
+      try {
+        r = JSON.parse(texto);
+      } catch {
+        // Una página de error de Cloudflare (ej. 1102: se pasó del tope de CPU), no la respuesta de la app.
+        throw new Error(`HTTP ${res.status}: ${texto.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200)}`);
+      }
       if (!res.ok || r.error) throw new Error(r.error ?? `Error ${res.status}`);
       if (r.meses.length === 0) {
-        mostrar("alert-success", `La base ya estaba al día con RAFAMOR SQL (datos al ${fecha(r.ultimoDia)}).`);
+        mostrar(
+          r.aviso ? "alert-warning" : "alert-success",
+          r.aviso ?? `La base ya estaba al día con RAFAMOR SQL (datos al ${fecha(r.ultimoDia)}).`
+        );
+        setTimeout(() => location.reload(), 2500);
         return;
       }
       const lista = r.meses
@@ -136,7 +148,9 @@ export function iniciarSyncRafamor() {
       mostrar(
         "alert-success",
         `<ul style="margin:0; padding-left:18px;">${lista}</ul>` +
-          (r.pendientes ? `<p style="margin:8px 0 0;">Quedan ${r.pendientes} mes(es) más por traer: volvé a apretar el botón.</p>` : "") +
+          (r.pendientes
+            ? `<p style="margin:8px 0 0;">Quedan ${r.pendientes} mes(es) más por traer: se traen solos cada 30 minutos, o volvé a apretar el botón.</p>`
+            : "") +
           (r.jurisdiccionesOmitidas.length
             ? `<p style="margin:8px 0 0;"><small>Sin código de jurisdicción, no se sincronizaron: ${r.jurisdiccionesOmitidas.join(", ")}.</small></p>`
             : "")

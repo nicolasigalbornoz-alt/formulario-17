@@ -171,42 +171,52 @@ igual fecha, con el reporte completo de RAFAM, que trae además
 aprobado/modificaciones/preventivo). Un mes ya cerrado no se pisa nunca.
 
 - **Automática en la nube** (la que corre siempre, sin depender de ninguna
-  PC): cada 4 horas, una tarea programada del Worker (`wrangler.toml` →
+  PC): cada 30 minutos, una tarea programada del Worker (`wrangler.toml` →
   `[triggers]`, `worker/index.mjs`) consulta **RAFAMOR SQL**
   (`https://rafamor-sql.pages.dev`, la base de lectura que regenera RAFAMOR a
-  diario con lo que baja de RAFAM) y trae cada mes de los últimos 12 que allá
-  tenga una foto más nueva que la cargada: el mes en curso y los que hayan
-  quedado parciales o sin cargar (hasta 3 por corrida). Así se cierran solos
-  los trimestres y se habilita el siguiente en el F17. Ver
+  diario con lo que baja de RAFAM) y trae **un mes por corrida**: el más
+  reciente de los últimos 12 que allá tenga una foto más nueva que la
+  cargada (el mes en curso, o uno que quedó parcial o sin cargar). Así se
+  cierran solos los trimestres y se habilita el siguiente en el F17. Ver
   `src/lib/sync-rafamor-sql.ts` para el detalle y sus límites:
+  - **Límites del plan gratuito de Cloudflare.** Cada ejecución del Worker
+    tiene 10 ms de CPU: armar un mes en JavaScript lleva ~35 ms y Cloudflare
+    cortaba la corrida sin escribir nada (por eso septiembre seguía al 24/09).
+    Ahora el mes se arma dentro de la consulta a RAFAMOR SQL (solo códigos e
+    importes) y esa respuesta pasa sin leer a D1, que la recorre con
+    `json_each`: al Worker le quedan ~2 ms. D1 admite 100.000 filas escritas
+    por día y reemplazar un mes son ~20.000, así que se reemplazan como
+    máximo 3 meses por día.
+  - **Control**: cada corrida queda en la tabla `rafam_sync` (se crea sola).
+    Las últimas se ven en el panel → Datos de RAFAM, y sin usuario en
+    `/api/estado` (solo fechas y estados, sin importes). Una corrida que
+    quedó "corriendo" la cortó Cloudflare.
   - **RAFAMOR SQL tiene el error del parser de RAFAMOR de abajo (1)**: no
     tiene ningún programa sin actividades (NN.00.00) y los suma a la
     categoría anterior. Verificado: Control Comunal 01.18.00 en RAFAMOR SQL a
     junio/2026 = 01.18.00 + 17.00.00 de la planilla "registros f17"
-    ($1.012.164.037). Afecta a unas 6 jurisdicciones con 11 programas así.
-    Por eso, si el mes que se reemplaza tiene alguno de esos programas para
-    una jurisdicción, esa jurisdicción conserva su foto anterior (el reporte
-    de RAFAM) y el resto se actualiza. El mes se vuelve a revisar en cada
-    corrida: cuando RAFAMOR SQL se regenere con el parser corregido, se
-    reemplaza solo.
+    ($1.012.164.037). Afecta a 6 jurisdicciones (Control Comunal, Tránsito,
+    Servicios de la Deuda, Jefatura de Gabinete, Educación, Planificación).
+    Si el mes que se reemplaza tiene alguno de esos programas para una
+    jurisdicción, esa jurisdicción conserva su foto anterior (el reporte de
+    RAFAM) y el resto se actualiza. El F17 de esa jurisdicción avisa hasta qué
+    día llegan sus datos. Cuando RAFAMOR SQL traiga esos programas (parser
+    corregido), el mes se reemplaza solo en la corrida siguiente.
   - No trae `aprobado`/`modificaciones`/`preventivo` (esa API no los tiene):
     quedan en 0 hasta que un reporte completo (manual o `sync-rafamor.mjs`)
     reemplace la foto de ese mes. El "disponible" de un mes solo sincronizado
     por esta vía, entonces, no resta preventivo.
   - La jurisdicción llega solo por nombre; se resuelve contra la tabla de
     `migrations/0003_usuarios.sql` (`JURISDICCION_CODIGO_POR_NOMBRE`). Una
-    jurisdicción nueva que no esté ahí se omite (avisado en el resultado del
-    botón "Sincronizar ahora" del panel → Datos de RAFAM).
-  - Los nombres de programa y de fuente (esta API solo da la categoría
-    programática y el código de fuente) se toman de los que ya tenga la base
-    de los reportes completos; si no hay, "Actividad Central" para el 01, el
-    de la categoría para programas sin actividades y los de las planillas
+    jurisdicción nueva que no esté ahí se omite (avisado en el panel).
+  - Los nombres de jurisdicción, programa, categoría y fuente se toman de los
+    que ya tenga la base de los reportes completos. Si no hay, se usan el de
+    RAFAMOR SQL, "Actividad Central" para el 01 y los de las planillas
     "registros f17" para las fuentes 110/131/132/133. Lo que quede sin nombre
     se muestra como "Programa NN" / "Fuente NNN".
   - Necesita los secrets `RAFAMOR_CF_CLIENT_ID` / `RAFAMOR_CF_CLIENT_SECRET`
     (el token de servicio de Cloudflare Access que entrega quien administra
-    RAFAMOR). Sin ellos, el sync queda inactivo (no rompe nada, solo no
-    corre). Desde el panel se puede disparar a mano con "Sincronizar ahora".
+    RAFAMOR). Desde el panel se puede disparar a mano con "Sincronizar ahora".
 - **Descarga + carga diaria en una PC con RAFAM** (la que usa la
   Subsecretaría): la tarea programada *F17 - Descargar RAFAM y sincronizar*
   corre `scripts\rafam-diario.ps1` de lunes a viernes a las 07:45. Baja de

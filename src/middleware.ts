@@ -11,7 +11,7 @@ const PUBLICAS = new Set([
   "/api/auth/ingresar",
   "/api/auth/salir",
   "/api/cron/alertas",
-  "/api/cron/sync-rafamor",
+  "/api/estado",
   "/lista-de-difusion/baja",
   "/api/mailing/unsubscribe",
 ]);

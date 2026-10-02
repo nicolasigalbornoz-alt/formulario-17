@@ -21,6 +21,9 @@ import {
   type F17Reporte,
 } from "../lib/f17";
 import { puedeVer } from "../lib/auth";
+import { conservadasDelMes } from "../lib/sync-rafamor-sql";
+
+const NOMBRE_MES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
 const usuario = Astro.locals.usuario!;
 const sql = d1(Astro.locals.runtime.env.DB);
@@ -42,6 +45,7 @@ const corte = await getCorte(sql);
 // Trimestre que se carga: solo los que tienen cerrados los anteriores.
 const disponibles = corte ? trimestresDisponibles(corte) : [];
 const T = corte ? trimestreElegido(corte, params.get("trimestre")) : null;
+const conservadas = corte ? await conservadasDelMes(Astro.locals.runtime.env.DB, corte.anio, corte.mes) : null;
 
 let jurisdicciones: CodDenom[] = [];
 let programas: CodDenom[] = [];
@@ -217,6 +221,16 @@ const urlPorPrograma =
   {
     corte && ver && jurisdiccion && programa && fuente && !reporte && (
       <div class="alert alert-warning">No hay partidas con crédito vigente ni compromiso para esa combinación.</div>
+    )
+  }
+
+  {
+    conservadas && jurisdiccion && conservadas.jurisdicciones.includes(jurisdiccion) && (
+      <div class="alert alert-warning" role="alert">
+        <strong>Atención:</strong> para esta jurisdicción, {NOMBRE_MES[corte!.mes - 1]} tiene datos al {fechaCorta(conservadas.hasta)} (no al{" "}
+        {fechaCorta(corte!.hasta)}). RAFAMOR SQL todavía suma sus programas sin actividades a otra categoría, así que se mantuvo el
+        último reporte de RAFAM. Se completa solo cuando RAFAMOR SQL lo corrija, o subiendo en el panel el reporte de RAFAM del mes completo.
+      </div>
     )
   }
 

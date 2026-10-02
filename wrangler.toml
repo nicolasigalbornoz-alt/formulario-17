@@ -38,10 +38,10 @@ MAIL_SMTP_PORT = "465"
 MAIL_SMTP_USER = "dir.presupuesto@moron.gob.ar"
 
 # - "0 11 * * *": alertas de vencimientos por mail, una vez al día (11:00 UTC = 8:00 Argentina).
-# - el resto: sincronizar el mes en curso desde RAFAMOR SQL, cada 4 horas
-#   (ver src/lib/sync-rafamor-sql.ts y worker/index.mjs).
+# - el resto: sincronizar con RAFAMOR SQL cada 30 minutos (un mes por corrida;
+#   ver src/lib/sync-rafamor-sql.ts y worker/index.mjs).
 [triggers]
-crons = ["0 11 * * *", "0 */4 * * *"]
+crons = ["0 11 * * *", "*/30 * * * *"]
 
 # Base creada con `wrangler d1 create f17_db`.
 [[d1_databases]]
