@@ -2,13 +2,14 @@
 import Base from "../../layouts/Base.astro";
 import AdminNav from "../../components/AdminNav.astro";
 import { fechaCorta } from "../../lib/f17";
-import { ultimasCorridas } from "../../lib/sync-rafamor-sql";
+import { conCredenciales, credencialesFaltantes, ultimasCorridas } from "../../lib/sync-rafamor-sql";
 
 const db = Astro.locals.runtime.env.DB;
 const cortes = await db
   .prepare("SELECT anio, mes, desde, hasta, mes_completo, filas, archivo, origen, cargado_en FROM rafam_cortes ORDER BY anio DESC, mes DESC")
   .all<{ anio: number; mes: number; desde: string; hasta: string; mes_completo: number; filas: number; archivo: string | null; origen: string; cargado_en: string }>();
 const corridas = await ultimasCorridas(db, 6);
+const faltanCredenciales = credencialesFaltantes(await conCredenciales(db, Astro.locals.runtime.env)).length > 0;
 const ESTADO: Record<string, string> = {
   ok: "trajo datos",
   al_dia: "ya estaba al día",
@@ -24,6 +25,7 @@ const q = Astro.url.searchParams;
   <AdminNav active="datos" />
 
   {q.get("ok") && <div class="alert alert-success">{q.get("msg")}</div>}
+  {q.get("error") && <div class="alert alert-error">{q.get("msg")}</div>}
 
   <div class="instructivo-layout">
     <div class="card">
@@ -95,6 +97,28 @@ const q = Astro.url.searchParams;
         <div id="vista-previa" class="alert alert-warning" hidden></div>
         <div class="form-actions" style="justify-content:flex-start;">
           <button class="btn btn-primary" type="submit" disabled>Cargar</button>
+        </div>
+      </form>
+      <form class="card" method="post" action="/api/admin/rafamor-credenciales">
+        <span class="eyebrow">Credenciales de RAFAMOR SQL</span>
+        {
+          faltanCredenciales ? (
+            <p class="card-intro" style="color:#b00020;">
+              <strong>Faltan.</strong> Sin ellas no se puede traer nada de RAFAMOR SQL. Pegá los dos datos del token de servicio
+              (CF-Access-Client-Id y CF-Access-Client-Secret).
+            </p>
+          ) : (
+            <p class="card-intro">Cargadas. Solo hace falta volver a pegarlas si se cambia el token de servicio.</p>
+          )
+        }
+        <label class="form-group">Client ID
+          <input class="form-control" name="client_id" required autocomplete="off" placeholder="xxxxxxxx.access" />
+        </label>
+        <label class="form-group">Client Secret
+          <input class="form-control" name="client_secret" type="password" required autocomplete="off" placeholder="cfast_…" />
+        </label>
+        <div class="form-actions" style="justify-content:flex-start;">
+          <button class="btn btn-primary" type="submit">Guardar</button>
         </div>
       </form>
       <div class="card" id="sync-rafamor">

@@ -47,9 +47,43 @@ export interface RafamorSqlEnv {
 
 export class ErrorRafamorSql extends Error {}
 
-/** Nombres de las credenciales que no llegan al Worker (vacías o sin cargar). */
+/** Nombres de las credenciales que faltan (vacías o sin cargar). */
 export function credencialesFaltantes(env: RafamorSqlEnv): string[] {
   return (["RAFAMOR_CF_CLIENT_ID", "RAFAMOR_CF_CLIENT_SECRET"] as const).filter((k) => !(env[k] ?? "").trim());
+}
+
+// Las credenciales pueden venir de los secrets del Worker o, si no están,
+// de las que el administrador cargó en el panel (Datos de RAFAM), guardadas
+// en la tabla rafamor_config de D1.
+
+const CREAR_CONFIG = "CREATE TABLE IF NOT EXISTS rafamor_config (clave TEXT PRIMARY KEY, valor TEXT NOT NULL, actualizado_en TEXT NOT NULL DEFAULT (datetime('now')))";
+
+/** "CF-Access-Client-Id: xxx.access" (la línea entera copiada de Cloudflare) -> "xxx.access". */
+export function limpiarCredencial(valor: string): string {
+  const v = valor.trim();
+  return (v.includes(":") ? v.slice(v.lastIndexOf(":") + 1) : v).trim().replace(/^["']|["']$/g, "");
+}
+
+export async function guardarCredenciales(db: D1Database, clientId: string, clientSecret: string): Promise<void> {
+  await db.prepare(CREAR_CONFIG).run();
+  const guardar = db.prepare("INSERT OR REPLACE INTO rafamor_config (clave, valor, actualizado_en) VALUES (?, ?, datetime('now'))");
+  await db.batch([guardar.bind("RAFAMOR_CF_CLIENT_ID", clientId), guardar.bind("RAFAMOR_CF_CLIENT_SECRET", clientSecret)]);
+}
+
+/** Las credenciales a usar: las del Worker, o las del panel para las que falten. */
+export async function conCredenciales(db: D1Database, env: RafamorSqlEnv): Promise<RafamorSqlEnv> {
+  if (credencialesFaltantes(env).length === 0) return env;
+  let filas: { clave: string; valor: string }[] = [];
+  try {
+    filas = (await db.prepare("SELECT clave, valor FROM rafamor_config").all<{ clave: string; valor: string }>()).results ?? [];
+  } catch (e) {
+    if (!/no such table/i.test(String(e))) throw e;
+  }
+  const delPanel = Object.fromEntries(filas.map((f) => [f.clave, f.valor]));
+  return {
+    RAFAMOR_CF_CLIENT_ID: (env.RAFAMOR_CF_CLIENT_ID ?? "").trim() || delPanel.RAFAMOR_CF_CLIENT_ID,
+    RAFAMOR_CF_CLIENT_SECRET: (env.RAFAMOR_CF_CLIENT_SECRET ?? "").trim() || delPanel.RAFAMOR_CF_CLIENT_SECRET,
+  };
 }
 
 /** Respuesta de RAFAMOR SQL ({cols, rows, truncado}) como texto, sin parsear. */
@@ -59,8 +93,7 @@ async function pedirRafamorSql(sql: string, env: RafamorSqlEnv): Promise<string>
   const faltan = credencialesFaltantes(env);
   if (faltan.length) {
     throw new ErrorRafamorSql(
-      `Falta ${faltan.join(" y ")} en el Worker: cargalo en Cloudflare → Workers → presupuesto → Settings → Variables and Secrets ` +
-        `(la sección de arriba, no la de Build), tipo Secret, y apretá Deploy.`
+      `Faltan las credenciales de RAFAMOR SQL (${faltan.join(", ")}): cargalas en el panel → Datos de RAFAM → "Credenciales de RAFAMOR SQL".`
     );
   }
 
@@ -328,7 +361,7 @@ export async function sincronizarRafamorSql(db: D1Database, env: RafamorSqlEnv, 
       db.prepare("DELETE FROM rafam_sync WHERE id <= ?").bind(id - 300),
     ]);
   try {
-    const r = await sincronizar(db, env);
+    const r = await sincronizar(db, await conCredenciales(db, env));
     const m = r.meses[0];
     const detalle = [
       m?.conservadas.length ? `Conservaron su foto anterior: ${m.conservadas.join(", ")}.` : "",
