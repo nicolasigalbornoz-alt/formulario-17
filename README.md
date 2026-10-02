@@ -153,16 +153,15 @@ la foto del último reporte (el del mes en curso se reemplaza a diario).
 
 Los reportes se interpretan con `src/lib/rafam-gastos.mjs`, validado contra
 los totales por jurisdicción que imprime el propio RAFAM en los 21 reportes
-mensuales de 2025–2026. Corrige dos problemas del parser de RAFAMOR
-(`generar_base_mensual.py` / `generar_base_diaria.py`), que conviene
-arreglar también allá:
+mensuales de 2025–2026. Corrige dos problemas que tenía el parser de
+RAFAMOR (`generar_base_mensual.py` / `generar_base_diaria.py`):
 
 1. Los programas sin actividades (`Apertura Programática:17.00.00 - …`, todo
-   en una celda) no se detectan y su gasto queda sumado a la categoría
-   anterior (ej. el programa 17 de Control Comunal aparece dentro de
-   01.18.00).
+   en una celda) no se detectaban y su gasto quedaba sumado a la categoría
+   anterior (ej. el programa 17 de Control Comunal aparecía dentro de
+   01.18.00). **RAFAMOR lo corrigió el 02/10/2026** (2025 en adelante).
 2. "Servicios de la Deuda", "Jefatura de Gabinete" y "Sec. de Mujeres…"
-   quedan sin código de jurisdicción (acá se toma del código RAFAM:
+   quedaban sin código de jurisdicción (acá se toma del código RAFAM:
    `1110109000` → 09).
 
 Hay tres formas de cargar los datos. Las tres escriben la misma tabla y
@@ -191,21 +190,20 @@ aprobado/modificaciones/preventivo). Un mes ya cerrado no se pisa nunca.
     Las últimas se ven en el panel → Datos de RAFAM, y sin usuario en
     `/api/estado` (solo fechas y estados, sin importes). Una corrida que
     quedó "corriendo" la cortó Cloudflare.
-  - **RAFAMOR SQL tiene el error del parser de RAFAMOR de abajo (1)**: no
-    tiene ningún programa sin actividades (NN.00.00) y los suma a la
-    categoría anterior. Verificado: Control Comunal 01.18.00 en RAFAMOR SQL a
-    junio/2026 = 01.18.00 + 17.00.00 de la planilla "registros f17"
-    ($1.012.164.037). Afecta a 6 jurisdicciones (Control Comunal, Tránsito,
-    Servicios de la Deuda, Jefatura de Gabinete, Educación, Planificación).
-    Si el mes que se reemplaza tiene alguno de esos programas para una
-    jurisdicción, esa jurisdicción conserva su foto anterior (el reporte de
-    RAFAM) y el resto se actualiza. El F17 de esa jurisdicción avisa hasta qué
-    día llegan sus datos. Cuando RAFAMOR SQL traiga esos programas (parser
-    corregido), el mes se reemplaza solo en la corrida siguiente.
-  - No trae `aprobado`/`modificaciones`/`preventivo` (esa API no los tiene):
-    quedan en 0 hasta que un reporte completo (manual o `sync-rafamor.mjs`)
-    reemplace la foto de ese mes. El "disponible" de un mes solo sincronizado
-    por esta vía, entonces, no resta preventivo.
+  - **Programas sin actividades (NN.00.00).** Hasta el 02/10/2026 RAFAMOR
+    SQL los sumaba a la categoría anterior (afectaba a Control Comunal,
+    Tránsito, Servicios de la Deuda, Jefatura de Gabinete, Educación y
+    Planificación) y, por eso, esas jurisdicciones conservaban septiembre al
+    24/09. Ya los separa: la corrida siguiente reemplazó septiembre entero.
+    Queda como resguardo: si una foto vuelve a venir sin ninguno, la
+    jurisdicción que los tenga en la foto anterior la conserva (y el F17
+    avisa hasta qué día llegan sus datos) hasta que RAFAMOR SQL los traiga.
+  - **Importes.** Trae los siete: `aprobado`, `modificaciones` y `vigente`
+    (saldos al último día del mes, de `credito_vigente`) y `preventivo`,
+    `compromiso`, `devengado` y `pagado` (movimientos del mes, de `gastos`).
+    Verificado con el reporte de RAFAM de Educación, programa 39.00.00
+    (julio–septiembre): las 73 partidas coinciden en los siete importes, y el
+    F17 de ese programa da lo mismo que el reporte.
   - La jurisdicción llega solo por nombre; se resuelve contra la tabla de
     `migrations/0003_usuarios.sql` (`JURISDICCION_CODIGO_POR_NOMBRE`). Una
     jurisdicción nueva que no esté ahí se omite (avisado en el panel).
@@ -218,9 +216,10 @@ aprobado/modificaciones/preventivo). Un mes ya cerrado no se pisa nunca.
     (el token de servicio de Cloudflare Access que entrega quien administra
     RAFAMOR). Desde el panel se puede disparar a mano con "Sincronizar ahora".
 - **Descarga + carga diaria en una PC con RAFAM** (la que usa la
-  Subsecretaría). Es la que trae los datos al día mientras la nube de RAFAMOR
-  SQL está pausada (desde el 02/10/2026 por el límite del plan gratis de
-  Turso, según su tabla `_actualizacion`). Se instala con **doble clic en
+  Subsecretaría). Es el respaldo si la nube de RAFAMOR SQL se pausa: lo hizo
+  el 02/10/2026 por el límite de escrituras del plan gratis de Turso, y quedó
+  resuelto ese mismo día con una carga incremental (la tabla `_actualizacion`
+  de RAFAMOR SQL dice `PAUSADA` mientras eso pase). Se instala con **doble clic en
   `scripts\instalar-tareas.bat`**: controla Node.js, autoriza la PC en
   Cloudflare (`npx wrangler login`), ubica el bot de RAFAMOR y guarda el
   usuario y la clave de RAFAM. Después crea la tarea *Presupuesto - Bajar
@@ -233,12 +232,25 @@ aprobado/modificaciones/preventivo). Un mes ya cerrado no se pisa nunca.
   (`%APPDATA%\formulario-17\rafam-credencial.xml`). Logs en
   `logs\rafam-diario.log` y `logs\sync-rafamor.log`. **El bot cierra
   cualquier Contabilidad.exe abierto al arrancar.** A diferencia del sync en
-  la nube, trae el reporte completo: aprobado/modificaciones/preventivo y los
-  programas sin actividades separados, así que también completa las
-  jurisdicciones que la nube conserva.
+  la nube, baja el reporte directo de RAFAM. Nunca pisa un mes con una foto
+  más vieja que la cargada (si la PC tiene una versión anterior del repo, hay
+  que actualizarla antes: la vieja sí lo hacía).
 - **Manual**, desde el panel → Datos de RAFAM: subir el `.xls` exportado de
   RAFAM (del día 1 al último día del mes, o hasta hoy). Se interpreta en el
-  navegador y reemplaza la foto de ese mes.
+  navegador y viaja de a 250 partidas (`src/pages/api/admin/rafam.ts`: leer
+  un mes entero de una vez pasaba los 10 ms de CPU del plan gratuito) y un
+  último pedido lo guarda en D1.
+  - Si trae todas las categorías programáticas que el mes ya tiene, reemplaza
+    la foto del mes entero.
+  - Si es un reporte **filtrado** (una jurisdicción o una categoría, como el de
+    Educación 39.00.00), reemplaza solo las categorías que trae y el resto del
+    mes queda como está. Para no mezclar fechas tiene que llegar al mismo día
+    que el resto del mes (si no, avisa a qué día exportarlo). Si el mes
+    conservaba esa jurisdicción de una foto más vieja, la saca de la marca.
+  - Un reporte más viejo que lo ya cargado se rechaza, y un mes nuevo solo se
+    puede empezar con el reporte de todas las jurisdicciones.
+  - Tiene que ser de un solo mes: uno trimestral ("Del 01/07 al 30/09") se
+    rechaza porque mezcla meses.
 
 ## Envío de mails
 

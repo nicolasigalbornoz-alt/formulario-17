@@ -20,15 +20,13 @@
 // Cada corrida queda registrada en `rafam_sync` (se ve en el panel y en
 // /api/estado); una que quedó "corriendo" la cortó Cloudflare.
 //
-// RAFAMOR SQL suma los programas sin actividades (NN.00.00) a la categoría
-// anterior (el error del parser de RAFAMOR que corrige rafam-gastos.mjs): una
-// jurisdicción que los tenga en la foto anterior la conserva, hasta que
-// RAFAMOR SQL los traiga.
+// Hasta el 02/10/2026 RAFAMOR SQL sumaba los programas sin actividades
+// (NN.00.00) a la categoría anterior (el error del parser de RAFAMOR que corrige
+// rafam-gastos.mjs); ya los separa. Queda como resguardo: si una foto vuelve a
+// venir sin ninguno, las jurisdicciones que los tienen en la foto anterior la
+// conservan, hasta que RAFAMOR SQL los traiga.
 //
 // Limitaciones de esta fuente respecto del reporte completo de RAFAM:
-//  - No tiene aprobado/modificaciones/preventivo (quedan en 0): el
-//    "disponible" de ese mes no resta preventivo hasta que se cargue el
-//    reporte completo y lo reemplace.
 //  - Su "programa" es la categoría programática ("01.17.00 - Nombre"). El
 //    nombre del programa sale de los meses ya cargados ("Actividad Central"
 //    para el 01 si no hay); si falta, src/lib/f17.ts muestra "Programa NN".
@@ -180,10 +178,14 @@ export interface Conservadas {
   jurisdicciones: string[];
 }
 
-function leerMarca(archivo: string | null | undefined): Conservadas | null {
+export function leerMarca(archivo: string | null | undefined): Conservadas | null {
   if (!archivo?.startsWith(MARCA_CONSERVADAS)) return null;
   const m = MARCA_RE.exec(archivo);
   return m ? { hasta: m[1], jurisdicciones: m[2].split(", ") } : null;
+}
+
+export function escribirMarca(c: Conservadas): string {
+  return `${MARCA_CONSERVADAS} (al ${c.hasta}) de las jurisdicciones ${c.jurisdicciones.join(", ")}`;
 }
 
 /** Jurisdicciones que en ese mes conservan una foto más vieja que la del resto (para avisarlo en el F17). */
@@ -208,16 +210,20 @@ const JUR = `jur(n, c) AS (VALUES ${Object.entries(JURISDICCION_CODIGO_POR_NOMBR
   .join(", ")})`;
 const ES_CATEGORIA = "programa GLOB '[0-9][0-9].[0-9][0-9].[0-9][0-9] - *'";
 
-/** Filas [jurisdiccion_codigo, catprog_codigo, fuente, partida_codigo, vigente, compromiso, devengado, pagado]. */
+/**
+ * Filas [jurisdiccion_codigo, catprog_codigo, fuente, partida_codigo, aprobado, modificaciones, vigente, preventivo,
+ * compromiso, devengado, pagado]. Aprobado, modificaciones y vigente son saldos al último día del mes
+ * (credito_vigente); preventivo, compromiso, devengado y pagado son movimientos que se suman en el mes (gastos).
+ */
 const consultaFilas = (anio: number, mes: number) => `WITH ${JUR},
   u AS (
-    SELECT jurisdiccion AS j, substr(programa, 1, 8) AS c, fuente AS f, partida_codigo AS p, 0 AS v, compromiso AS co, devengado AS d, pagado AS pa
+    SELECT jurisdiccion AS j, substr(programa, 1, 8) AS c, fuente AS f, partida_codigo AS p, 0 AS ap, 0 AS mo, 0 AS v, preventivo AS pr, compromiso AS co, devengado AS d, pagado AS pa
     FROM gastos WHERE anio = ${anio} AND mes = ${mes} AND ${ES_CATEGORIA}
     UNION ALL
-    SELECT jurisdiccion, substr(programa, 1, 8), fuente, partida_codigo, vigente, 0, 0, 0
+    SELECT jurisdiccion, substr(programa, 1, 8), fuente, partida_codigo, aprobado, modificaciones, vigente, 0, 0, 0, 0
     FROM credito_vigente WHERE anio = ${anio} AND mes = ${mes} AND ${ES_CATEGORIA}
   )
-SELECT jur.c, u.c, u.f, u.p, ROUND(SUM(u.v), 2), ROUND(SUM(u.co), 2), ROUND(SUM(u.d), 2), ROUND(SUM(u.pa), 2)
+SELECT jur.c, u.c, u.f, u.p, ${["ap", "mo", "v", "pr", "co", "d", "pa"].map((c) => `ROUND(COALESCE(SUM(u.${c}), 0), 2)`).join(", ")}
 FROM u JOIN jur ON jur.n = u.j GROUP BY 1, 2, 3, 4`;
 
 /**
@@ -245,7 +251,7 @@ INSERT INTO rafam_gastos (anio, mes, jurisdiccion_codigo, jurisdiccion, programa
   fuente_codigo, fuente, inciso, partida_codigo, partida, aprobado, modificaciones, vigente, preventivo, compromiso, devengado, pagado)
 WITH
   src AS (
-    SELECT ${["jcod", "cat", "fuente", "partida_codigo", "vigente", "compromiso", "devengado", "pagado"]
+    SELECT ${["jcod", "cat", "fuente", "partida_codigo", "aprobado", "modificaciones", "vigente", "preventivo", "compromiso", "devengado", "pagado"]
       .map((c, i) => `json_extract(value, '$[${i}]') AS ${c}`)
       .join(", ")}
     FROM json_each(?3, '$.rows')
@@ -271,7 +277,7 @@ SELECT ?1, ?2, s.jcod, COALESCE(nj.nom, jr.nom), substr(s.cat, 1, 2),
          .map(([c, n]) => `WHEN ${lit(c)} THEN ${lit(n)}`)
          .join(" ")} END),
        substr(s.partida_codigo, 1, instr(s.partida_codigo, '.') - 1), s.partida_codigo, pr.nom,
-       0, 0, s.vigente, 0, s.compromiso, s.devengado, s.pagado
+       s.aprobado, s.modificaciones, s.vigente, s.preventivo, s.compromiso, s.devengado, s.pagado
 FROM src s
 LEFT JOIN nombres cr ON cr.t = 'c' AND cr.j = s.jcod AND cr.c = s.cat
 LEFT JOIN nombres pr ON pr.t = 'p' AND pr.c = s.partida_codigo
@@ -461,7 +467,7 @@ async function sincronizar(db: D1Database, env: RafamorSqlEnv): Promise<Resultad
         `${anio}-${String(mes).padStart(2, "0")}-01`,
         hasta,
         mesCompleto ? 1 : 0,
-        conservar.length ? `${MARCA_CONSERVADAS} (al ${fotoAnterior}) de las jurisdicciones ${conservar.join(", ")}` : null
+        conservar.length ? escribirMarca({ hasta: fotoAnterior, jurisdicciones: conservar }) : null
       ),
   ]);
   const corte = await db.prepare("SELECT filas FROM rafam_cortes WHERE anio = ? AND mes = ?").bind(anio, mes).first<{ filas: number }>();

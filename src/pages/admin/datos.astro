@@ -89,7 +89,9 @@ const q = Astro.url.searchParams;
         <h2 class="card-title" style="margin:8px 0 8px;">Subir un reporte de RAFAM</h2>
         <p class="card-intro" style="margin-bottom:16px;">
           En RAFAM: <em>Estado de Ejecución del Presupuesto de Gastos</em>, del día 1 al último día del mes (o hasta hoy si es el
-          mes en curso), todas las partidas, exportado a Excel (.xls). Reemplaza la foto de ese mes.
+          mes en curso), todas las partidas, exportado a Excel (.xls). Si trae todo el mes, reemplaza la foto de ese mes. Si está
+          filtrado por jurisdicción o categoría programática, reemplaza solo lo que trae y tiene que llegar al mismo día que el
+          resto del mes. Un reporte más viejo que lo ya cargado no se carga.
         </p>
         <label class="form-group">Archivo
           <input class="form-control" type="file" name="archivo" accept=".xls,.xlsx" required />
