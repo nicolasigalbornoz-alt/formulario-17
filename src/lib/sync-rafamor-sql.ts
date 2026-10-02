@@ -47,11 +47,22 @@ export interface RafamorSqlEnv {
 
 export class ErrorRafamorSql extends Error {}
 
+/** Nombres de las credenciales que no llegan al Worker (vacías o sin cargar). */
+export function credencialesFaltantes(env: RafamorSqlEnv): string[] {
+  return (["RAFAMOR_CF_CLIENT_ID", "RAFAMOR_CF_CLIENT_SECRET"] as const).filter((k) => !(env[k] ?? "").trim());
+}
+
 /** Respuesta de RAFAMOR SQL ({cols, rows, truncado}) como texto, sin parsear. */
 async function pedirRafamorSql(sql: string, env: RafamorSqlEnv): Promise<string> {
   const cid = (env.RAFAMOR_CF_CLIENT_ID ?? "").trim();
   const secreto = (env.RAFAMOR_CF_CLIENT_SECRET ?? "").trim();
-  if (!cid || !secreto) throw new ErrorRafamorSql("Faltan los secrets RAFAMOR_CF_CLIENT_ID / RAFAMOR_CF_CLIENT_SECRET.");
+  const faltan = credencialesFaltantes(env);
+  if (faltan.length) {
+    throw new ErrorRafamorSql(
+      `Falta ${faltan.join(" y ")} en el Worker: cargalo en Cloudflare → Workers → presupuesto → Settings → Variables and Secrets ` +
+        `(la sección de arriba, no la de Build), tipo Secret, y apretá Deploy.`
+    );
+  }
 
   const res = await fetch(`${RAFAMOR_SQL_URL}/api/sql`, {
     method: "POST",
