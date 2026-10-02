@@ -57,6 +57,7 @@ Remove-Variable clave
 
 Log "Cargando en la base del F17"
 if ($NodeDir) { $env:NODE_DIR = $NodeDir }
+$env:RAFAMOR_DIR = $RafamorDir   # sync-rafamor.mjs busca los reportes ahí
 & cmd.exe /c "`"$repo\scripts\sync-rafamor.bat`""
 $sync = $LASTEXITCODE
 Log "Sincronización terminó con código $sync (detalle en logs\sync-rafamor.log)"
