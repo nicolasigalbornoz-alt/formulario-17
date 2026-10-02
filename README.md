@@ -218,19 +218,24 @@ aprobado/modificaciones/preventivo). Un mes ya cerrado no se pisa nunca.
     (el token de servicio de Cloudflare Access que entrega quien administra
     RAFAMOR). Desde el panel se puede disparar a mano con "Sincronizar ahora".
 - **Descarga + carga diaria en una PC con RAFAM** (la que usa la
-  Subsecretaría): la tarea programada *F17 - Descargar RAFAM y sincronizar*
-  corre `scripts\rafam-diario.ps1` de lunes a viernes a las 07:45. Baja de
-  RAFAM los reportes mensuales de gastos con el bot de RAFAMOR
-  (`rafam_ejecutado_bg.py --periodo mes --tipo gastos`) y después corre
-  `node scripts/sync-rafamor.mjs --remote` (necesita credenciales de
-  Cloudflare: `npx wrangler login` una vez, o la variable
-  `CLOUDFLARE_API_TOKEN` con permiso de edición sobre D1). El usuario y la
-  clave de RAFAM se cargan una vez con `scripts\guardar-credencial-rafam.bat`
-  (doble clic) y quedan cifrados con la cuenta de Windows
-  (`%APPDATA%\formulario-17\rafam-credencial.xml`). Log en
-  `logs\rafam-diario.log`. **El bot cierra cualquier Contabilidad.exe abierto
-  al arrancar.** A diferencia del sync en la nube, trae el reporte completo
-  (con aprobado/modificaciones/preventivo).
+  Subsecretaría). Es la que trae los datos al día mientras la nube de RAFAMOR
+  SQL está pausada (desde el 02/10/2026 por el límite del plan gratis de
+  Turso, según su tabla `_actualizacion`). Se instala con **doble clic en
+  `scripts\instalar-tareas.bat`**: controla Node.js, autoriza la PC en
+  Cloudflare (`npx wrangler login`), ubica el bot de RAFAMOR y guarda el
+  usuario y la clave de RAFAM. Después crea la tarea *Presupuesto - Bajar
+  RAFAM y actualizar la pagina*, de lunes a viernes a las 07:45 y 19:00
+  (solo con la sesión iniciada), y ofrece correrla en ese momento. La tarea
+  corre `scripts\rafam-diario.ps1`: baja de RAFAM los reportes mensuales de
+  gastos con el bot de RAFAMOR (`rafam_ejecutado_bg.py --periodo mes --tipo
+  gastos`) y después `node scripts/sync-rafamor.mjs --remote`. La clave de
+  RAFAM queda cifrada con la cuenta de Windows
+  (`%APPDATA%\formulario-17\rafam-credencial.xml`). Logs en
+  `logs\rafam-diario.log` y `logs\sync-rafamor.log`. **El bot cierra
+  cualquier Contabilidad.exe abierto al arrancar.** A diferencia del sync en
+  la nube, trae el reporte completo: aprobado/modificaciones/preventivo y los
+  programas sin actividades separados, así que también completa las
+  jurisdicciones que la nube conserva.
 - **Manual**, desde el panel → Datos de RAFAM: subir el `.xls` exportado de
   RAFAM (del día 1 al último día del mes, o hasta hoy). Se interpreta en el
   navegador y reemplaza la foto de ese mes.
