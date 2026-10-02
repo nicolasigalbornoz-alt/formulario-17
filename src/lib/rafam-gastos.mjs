@@ -33,6 +33,7 @@ const APERTURA_RE = /^Apertura Program[aá]tica:\s*(.*)$/;
 const CATPROG_RE = /^(\d{2})\.(\d{2})\.(\d{2})\s*-\s*(.+)$/;
 const PARTIDA_RE = /^(\d+\.\d+\.\d+\.\d+)\s*-\s*(.+)$/;
 const FUENTE_RE = /^(\d{2,4})\s*-\s*(.+)$/;
+const FILTRO_RE = /^Filtro aplicado:\s*(.+)$/i;
 
 const str = (v) => (typeof v === "string" ? v.trim() : "");
 const num = (v) => (typeof v === "number" && Number.isFinite(v) ? v : 0);
@@ -62,7 +63,8 @@ function ultimoDiaDelMes(anio, mes) {
  * @returns {{
  *   periodo: { anio: number, mes: number, desde: string, hasta: string, mesCompleto: boolean },
  *   filas: Array<Record<string, string|number|null>>,
- *   avisos: string[]
+ *   avisos: string[],
+ *   filtro: string | null
  * }}
  */
 export function parseReporteGastos(rows) {
@@ -90,6 +92,8 @@ export function parseReporteGastos(rows) {
 
   const filas = [];
   const avisos = [];
+  // Al pie: "Filtro aplicado: Ejercicio: 2026 - Jurisdicción: 1110107000 - Categoría Programática: 39.00.00 al 39.00.00 - ..."
+  let filtro = null;
   let juris = null; // { codigo, nombre }
   let programa = null; // { codigo, nombre }
   let catprog = null; // { codigo, nombre }
@@ -134,6 +138,11 @@ export function parseReporteGastos(rows) {
         continue;
       }
       if (/^total/i.test(c0)) continue;
+      const mfi = FILTRO_RE.exec(c0);
+      if (mfi) {
+        filtro = mfi[1].trim();
+        continue;
+      }
       const mf = FUENTE_RE.exec(c0);
       if (mf && !c2) {
         fuente = { codigo: mf[1], nombre: mf[2].trim() };
@@ -197,5 +206,6 @@ export function parseReporteGastos(rows) {
     periodo: { anio: periodo.anio, mes: periodo.mes, desde: periodo.desde, hasta: periodo.hasta, mesCompleto },
     filas: [...porClave.values()],
     avisos,
+    filtro,
   };
 }

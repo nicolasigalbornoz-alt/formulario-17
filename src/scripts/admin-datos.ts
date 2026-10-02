@@ -1,7 +1,8 @@
 // Subida manual de un reporte de gastos de RAFAM desde el panel. El .xls se
 // lee y se interpreta en el navegador (mismo parser que el script de
-// sincronización) y al servidor solo viaja el resultado: así el Worker no
-// gasta CPU leyendo un Excel de 1 MB.
+// sincronización) y al servidor solo viaja el resultado, de a LOTE partidas
+// por pedido y después un "confirmar" que reemplaza el mes: así el Worker no
+// pasa de los 10 ms de CPU del plan gratuito (ver src/pages/api/admin/rafam.ts).
 
 import { parseReporteGastos } from "../lib/rafam-gastos.mjs";
 
@@ -13,7 +14,24 @@ const COLS = [
   "aprobado", "modificaciones", "vigente", "preventivo", "compromiso", "devengado", "pagado",
 ] as const;
 
+const LOTE = 250;
+
 const pesos = (n: number) => `$ ${n.toLocaleString("es-AR", { maximumFractionDigits: 0 })}`;
+const esc = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/** POST a /api/admin/rafam; un error de Cloudflare (página HTML) también se muestra. */
+async function enviar(cuerpo: unknown): Promise<{ mensaje?: string }> {
+  const res = await fetch("/api/admin/rafam", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(cuerpo) });
+  const texto = await res.text();
+  let body: { error?: string; mensaje?: string };
+  try {
+    body = JSON.parse(texto);
+  } catch {
+    throw new Error(`HTTP ${res.status}: ${texto.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 200)}`);
+  }
+  if (!res.ok || body.error) throw new Error(body.error ?? `Error ${res.status}`);
+  return body;
+}
 
 export function iniciarSubidaRafam() {
   const form = document.querySelector<HTMLFormElement>("#subir-reporte");
@@ -45,14 +63,18 @@ export function iniciarSubidaRafam() {
       if (!reporte.filas.length) throw new Error("El reporte no tiene partidas con importes.");
       const vig = reporte.filas.reduce((a, f) => a + Number(f.vigente), 0);
       const comp = reporte.filas.reduce((a, f) => a + Number(f.compromiso), 0);
-      const juris = new Set(reporte.filas.map((f) => f.jurisdiccion_codigo)).size;
+      const juris = new Map(reporte.filas.map((f) => [f.jurisdiccion_codigo, String(f.jurisdiccion)]));
+      const categorias = new Set(reporte.filas.map((f) => `${f.jurisdiccion_codigo}|${f.catprog_codigo}`)).size;
       const p = reporte.periodo;
       mostrar(
         "alert-success",
         `<strong>Del ${p.desde.split("-").reverse().join("/")} al ${p.hasta.split("-").reverse().join("/")}</strong>` +
-          `${p.mesCompleto ? "" : " (mes parcial)"}<br>${reporte.filas.length.toLocaleString("es-AR")} partidas · ${juris} jurisdicciones<br>` +
-          `Crédito vigente ${pesos(vig)} · Compromiso del mes ${pesos(comp)}` +
-          (reporte.avisos.length ? `<br><small>${reporte.avisos.length} aviso(s): ${reporte.avisos.slice(0, 2).join(" · ")}</small>` : "")
+          `${p.mesCompleto ? "" : " (mes parcial)"}<br>${reporte.filas.length.toLocaleString("es-AR")} partidas · ` +
+          `${categorias} categorías · ` +
+          (juris.size <= 3 ? esc([...juris.values()].join(", ")) : `${juris.size} jurisdicciones`) +
+          `<br>Crédito vigente ${pesos(vig)} · Compromiso del mes ${pesos(comp)}` +
+          (reporte.filtro ? `<br><small>Filtro aplicado en RAFAM: ${esc(reporte.filtro)}</small>` : "") +
+          (reporte.avisos.length ? `<br><small>${reporte.avisos.length} aviso(s): ${esc(reporte.avisos.slice(0, 2).join(" · "))}</small>` : "")
       );
       boton.disabled = false;
     } catch (e) {
@@ -64,21 +86,17 @@ export function iniciarSubidaRafam() {
     e.preventDefault();
     if (!reporte) return;
     boton.disabled = true;
-    boton.textContent = "Cargando…";
     try {
-      const res = await fetch("/api/admin/rafam", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          archivo,
-          periodo: reporte.periodo,
-          columnas: COLS,
-          filas: reporte.filas.map((f) => COLS.map((c) => f[c])),
-        }),
-      });
-      const body = (await res.json().catch(() => ({ error: `Error ${res.status}` }))) as { error?: string; mensaje?: string };
-      if (!res.ok) throw new Error(body.error ?? `Error ${res.status}`);
-      location.href = `/admin/datos?ok=1&msg=${encodeURIComponent(body.mensaje ?? "Reporte cargado.")}`;
+      const filas = reporte.filas.map((f) => COLS.map((c) => f[c]));
+      const subida = crypto.randomUUID();
+      const lotes = Math.ceil(filas.length / LOTE);
+      for (let i = 0; i < lotes; i++) {
+        boton.textContent = `Subiendo ${i + 1} de ${lotes}…`;
+        await enviar({ paso: "lote", subida, lote: i, columnas: COLS, filas: filas.slice(i * LOTE, (i + 1) * LOTE) });
+      }
+      boton.textContent = "Guardando…";
+      const r = await enviar({ paso: "confirmar", subida, lotes, filas: filas.length, archivo, periodo: reporte.periodo });
+      location.href = `/admin/datos?ok=1&msg=${encodeURIComponent(r.mensaje ?? "Reporte cargado.")}`;
     } catch (err) {
       mostrar("alert-error", `No se pudo cargar: ${err instanceof Error ? err.message : err}`);
       boton.disabled = false;
