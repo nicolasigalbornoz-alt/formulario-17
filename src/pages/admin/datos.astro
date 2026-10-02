@@ -2,11 +2,20 @@
 import Base from "../../layouts/Base.astro";
 import AdminNav from "../../components/AdminNav.astro";
 import { fechaCorta } from "../../lib/f17";
+import { ultimasCorridas } from "../../lib/sync-rafamor-sql";
 
 const db = Astro.locals.runtime.env.DB;
 const cortes = await db
   .prepare("SELECT anio, mes, desde, hasta, mes_completo, filas, archivo, origen, cargado_en FROM rafam_cortes ORDER BY anio DESC, mes DESC")
   .all<{ anio: number; mes: number; desde: string; hasta: string; mes_completo: number; filas: number; archivo: string | null; origen: string; cargado_en: string }>();
+const corridas = await ultimasCorridas(db, 6);
+const ESTADO: Record<string, string> = {
+  ok: "trajo datos",
+  al_dia: "ya estaba al día",
+  tope: "tope diario",
+  error: "error",
+  corriendo: "no terminó (la cortó Cloudflare)",
+};
 const MESES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
 const q = Astro.url.searchParams;
 ---
@@ -91,9 +100,23 @@ const q = Astro.url.searchParams;
       <div class="card" id="sync-rafamor">
         <span class="eyebrow">Carga automática</span>
         <p class="card-intro">
-          Cada 4 horas se traen solos desde RAFAMOR SQL (la base en la nube que actualiza RAFAMOR) el mes en curso y cualquier mes
-          que haya quedado parcial. Nunca pisa un mes ya cerrado ni un reporte de RAFAM de la misma fecha.
+          Cada 30 minutos se trae solo desde RAFAMOR SQL (la base en la nube que actualiza RAFAMOR) el mes en curso o cualquier mes
+          que haya quedado parcial, uno por vez. Nunca pisa un mes ya cerrado ni un reporte de RAFAM de la misma fecha.
         </p>
+        {
+          corridas.length > 0 && (
+            <ul style="font-size:13px; margin:0 0 14px; padding-left:18px; color:#555;">
+              {corridas.map((c) => (
+                <li>
+                  {c.inicio.slice(5, 16).replace("T", " ")} UTC · {c.origen === "panel" ? "botón" : "automática"} ·{" "}
+                  <strong style={c.estado === "error" || c.estado === "corriendo" ? "color:#b00020" : ""}>{ESTADO[c.estado] ?? c.estado}</strong>
+                  {c.estado === "ok" && c.mes && ` · ${MESES[c.mes - 1]} al ${fechaCorta(c.hasta ?? "")}`}
+                  {c.detalle && <span style="display:block; color:#777;">{c.detalle}</span>}
+                </li>
+              ))}
+            </ul>
+          )
+        }
         <div id="sync-rafamor-resultado" class="alert alert-warning" hidden></div>
         <div class="form-actions" style="justify-content:flex-start;">
           <button class="btn btn-secondary" type="button" id="sync-rafamor-boton">Sincronizar ahora</button>
