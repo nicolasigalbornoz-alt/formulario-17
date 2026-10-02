@@ -20,9 +20,50 @@ function Paso([string]$m) { Write-Host ""; Write-Host "== $m" -ForegroundColor C
 function Falla([string]$m) { Write-Host $m -ForegroundColor Red; exit 1 }
 
 Paso "1/5 Node.js"
+# Sin permisos de administrador: la version portable oficial (ZIP de
+# nodejs.org) descomprimida en el perfil del usuario. No pide UAC.
+$nodePortable = Join-Path $env:LOCALAPPDATA "Programs\nodejs"
+$nodeDir = $null
 $node = (Get-Command node.exe -ErrorAction SilentlyContinue).Source
-if (-not $node) { Falla "No encuentro Node.js. Instalalo desde https://nodejs.org (version LTS) y volve a correr esto." }
-Write-Host "OK: $node"
+if (-not $node -and (Test-Path (Join-Path $nodePortable "node.exe"))) { $node = Join-Path $nodePortable "node.exe" }
+if (-not $node) {
+    $resp = Read-Host "No esta Node.js. Bajo la version LTS portable oficial de nodejs.org (unos 30 MB) a $nodePortable, sin pedir permisos de administrador? (S/N)"
+    if ($resp -notmatch "^[sS]") { Falla "Sin Node.js no se puede seguir. Instalalo desde https://nodejs.org y volve a correr esto." }
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+        $arq = if ([Environment]::Is64BitOperatingSystem) { "win-x64" } else { "win-x86" }
+        $lts = (Invoke-RestMethod "https://nodejs.org/dist/index.json" -UseBasicParsing | Where-Object { $_.lts } | Select-Object -First 1).version
+        $zip = "node-$lts-$arq.zip"
+        $tmp = Join-Path $env:TEMP "presupuesto-node"
+        New-Item -ItemType Directory -Force -Path $tmp | Out-Null
+        Write-Host "Bajando $zip de https://nodejs.org/dist/$lts/ ..."
+        Invoke-WebRequest "https://nodejs.org/dist/$lts/$zip" -OutFile (Join-Path $tmp $zip) -UseBasicParsing
+        # Control de integridad contra la lista oficial de sumas SHA-256.
+        $sumas = (Invoke-WebRequest "https://nodejs.org/dist/$lts/SHASUMS256.txt" -UseBasicParsing).Content
+        $esperada = ($sumas -split "`n" | Where-Object { $_ -match [regex]::Escape($zip) + "$" }) -replace "\s+.*$", ""
+        $real = (Get-FileHash (Join-Path $tmp $zip) -Algorithm SHA256).Hash
+        if (-not $esperada -or $real -ne $esperada.Trim().ToUpper()) { Falla "El archivo bajado no coincide con la suma oficial de nodejs.org. No se instalo nada." }
+        Expand-Archive (Join-Path $tmp $zip) -DestinationPath $tmp -Force
+        if (Test-Path $nodePortable) { Remove-Item $nodePortable -Recurse -Force }
+        New-Item -ItemType Directory -Force -Path (Split-Path $nodePortable) | Out-Null
+        Move-Item (Join-Path $tmp ($zip -replace "\.zip$", "")) $nodePortable
+        Remove-Item $tmp -Recurse -Force -ErrorAction SilentlyContinue
+    } catch {
+        Falla "No se pudo bajar Node.js: $($_.Exception.Message)"
+    }
+    $node = Join-Path $nodePortable "node.exe"
+    if (-not (Test-Path $node)) { Falla "No quedo node.exe en $nodePortable." }
+    # Para que se encuentre en las ventanas nuevas (PATH del usuario, no del sistema).
+    $pathUsuario = [Environment]::GetEnvironmentVariable("Path", "User")
+    if (($pathUsuario -split ";") -notcontains $nodePortable) {
+        [Environment]::SetEnvironmentVariable("Path", ((@($pathUsuario, $nodePortable) | Where-Object { $_ }) -join ";"), "User")
+    }
+}
+if ($node -like "$nodePortable*") {
+    $nodeDir = $nodePortable
+    $env:Path = "$nodePortable;$env:Path"
+}
+Write-Host "OK: $node ($(& $node --version))"
 Push-Location $repo
 if (-not (Test-Path (Join-Path $repo "node_modules\wrangler"))) {
     Write-Host "Instalando dependencias del repo (npm install)..."
@@ -60,7 +101,8 @@ Write-Host "OK: guardada (cifrada con tu usuario de Windows)"
 Paso "5/5 Tarea programada"
 Unregister-ScheduledTask -TaskName "F17 - Descargar RAFAM y sincronizar" -Confirm:$false -ErrorAction SilentlyContinue
 $accion = New-ScheduledTaskAction -Execute "powershell.exe" -WorkingDirectory $repo `
-    -Argument "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$repo\scripts\rafam-diario.ps1`" -RafamorDir `"$rafamor`""
+    -Argument ("-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$repo\scripts\rafam-diario.ps1`" -RafamorDir `"$rafamor`"" +
+        $(if ($nodeDir) { " -NodeDir `"$nodeDir`"" } else { "" }))
 $dias = "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"
 $disparos = @(
     (New-ScheduledTaskTrigger -Weekly -DaysOfWeek $dias -At "07:45"),
