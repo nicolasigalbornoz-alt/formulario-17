@@ -42,6 +42,7 @@ const archivosSueltos = process.argv
 const destino = args.remote ? "--remote" : "--local";
 const soloSql = Boolean(args["solo-sql"]);
 const forzar = Boolean(args.forzar);
+const MAX_MESES_REMOTOS = 3;
 const anioActual = new Date().getFullYear();
 const desde = Number(args.desde ?? anioActual - 1);
 const rafamorDir = path.resolve(
@@ -74,6 +75,12 @@ function cortesCargados() {
     const json = JSON.parse(out.slice(out.indexOf("[")));
     return new Map((json[0]?.results ?? []).map((r) => [`${r.anio}-${r.mes}`, r]));
   } catch (e) {
+    // En producción no se sigue sin saber qué hay cargado: sin esa lista no hay
+    // cómo evitar pisar un mes más nuevo con un reporte más viejo (pasó el
+    // 14/10/2026: se recargaron julio a septiembre y septiembre quedó al 24/09).
+    if (destino === "--remote") {
+      throw new Error(`No pude leer rafam_cortes de la base de producción: no se carga nada para no pisar datos más nuevos.\n${e.message}`);
+    }
     console.warn("No pude leer rafam_cortes (¿falta aplicar las migraciones?). Se cargan todos los meses.\n", e.message);
     return new Map();
   }
@@ -154,6 +161,13 @@ function main() {
     const previo = cargados.get(`${anio}-${mes}`);
     if (previo && (previo.hasta > hasta || (previo.hasta === hasta && previo.origen !== "rafamor_sql"))) {
       console.log(`= ${etiqueta}: ${previo.hasta === hasta ? "ya estaba cargado" : `la base ya tiene datos más nuevos (al ${previo.hasta})`}`);
+      continue;
+    }
+    // Cada mes reemplazado son ~20.000 filas escritas y D1 admite 100.000 por día
+    // (si se agotan, la página no puede ni registrar los ingresos): como mucho
+    // MAX_MESES_REMOTOS por corrida; el resto sigue en la siguiente.
+    if (destino === "--remote" && !forzar && hechos >= MAX_MESES_REMOTOS) {
+      console.log(`· ${etiqueta}: queda para la próxima corrida (tope de ${MAX_MESES_REMOTOS} meses por corrida, por el límite diario de escrituras de D1).`);
       continue;
     }
     for (const a of reporte.avisos) console.warn(`  ! ${a}`);
