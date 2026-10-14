@@ -98,7 +98,10 @@ mails no salen (ver «Envío de mails»).
   F17 de sus jurisdicciones; el servidor rechaza cualquier otra. Las
   contraseñas las genera el administrador en Panel → Usuarios («Generar
   contraseñas para los … sin contraseña»): se muestran una sola vez, con un
-  CSV para repartirlas. Se guardan con PBKDF2; cambiar la contraseña o
+  CSV para repartirlas. Se guardan con PBKDF2 de 3.000 vueltas (~2 ms de CPU:
+  con 20.000 el ingreso de las secretarías pasaba los 10 ms del plan gratuito
+  de Cloudflare y fallaba; una clave guardada con 20.000 hay que
+  restablecerla para que quede con el costo nuevo); cambiar la contraseña o
   desactivar el usuario cierra sus sesiones. 8 intentos fallidos en 15
   minutos bloquean el usuario un rato.
 - **Seguimiento** (Panel → Seguimiento F17): para el trimestre que se está
