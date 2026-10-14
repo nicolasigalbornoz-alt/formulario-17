@@ -50,10 +50,19 @@ export function timingSafeEqual(a: string, b: string): boolean {
 
 // ---------------------------------------------------------------------------
 // Contraseñas de la tabla usuarios: PBKDF2-SHA256 con sal. Las iteraciones
-// quedan guardadas en el hash para poder subirlas más adelante. 20.000 es un
-// compromiso con el tope de CPU por pedido de Cloudflare Workers.
+// quedan guardadas en el hash para poder cambiarlas más adelante.
+//
+// El plan gratuito de Cloudflare Workers corta cada pedido a los 10 ms de CPU.
+// Medido: 20.000 iteraciones cuestan 10-18 ms (el ingreso de las secretarías y
+// el alta/restablecimiento de claves fallaban con un error de Cloudflare;
+// el administrador no, porque su clave es un SHA-256 simple), 3.000 cuestan
+// ~3 ms. Las claves de las secretarías las genera el sistema (generarClave,
+// ~59 bits) y el ingreso se bloquea tras 8 fallos en 15 minutos, así que la
+// resistencia a un ataque de fuerza bruta no depende de las vueltas.
+// Los hashes ya guardados con 20.000 se siguen verificando igual: hay que
+// restablecer esas claves (panel → Usuarios) para que queden con el costo nuevo.
 
-const ITERACIONES = 20_000;
+const ITERACIONES = 3_000;
 
 async function pbkdf2(clave: string, sal: Uint8Array<ArrayBuffer>, iteraciones: number): Promise<ArrayBuffer> {
   const key = await crypto.subtle.importKey("raw", enc.encode(clave), "PBKDF2", false, ["deriveBits"]);
