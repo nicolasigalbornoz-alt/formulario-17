@@ -173,7 +173,7 @@ igual fecha, con el reporte completo de RAFAM, que trae además
 aprobado/modificaciones/preventivo). Un mes ya cerrado no se pisa nunca.
 
 - **Automática en la nube** (la que corre siempre, sin depender de ninguna
-  PC): cada 30 minutos, una tarea programada del Worker (`wrangler.toml` →
+  PC): una vez por día (11:30 hs de Argentina, después de que RAFAMOR regenera su base), una tarea programada del Worker (`wrangler.toml` →
   `[triggers]`, `worker/index.mjs`) consulta **RAFAMOR SQL**
   (`https://rafamor-sql.pages.dev`, la base de lectura que regenera RAFAMOR a
   diario con lo que baja de RAFAM) y trae **un mes por corrida**: el más

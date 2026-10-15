@@ -167,7 +167,7 @@ export function iniciarSyncRafamor() {
         "alert-success",
         `<ul style="margin:0; padding-left:18px;">${lista}</ul>` +
           (r.pendientes
-            ? `<p style="margin:8px 0 0;">Quedan ${r.pendientes} mes(es) más por traer: se traen solos cada 30 minutos, o volvé a apretar el botón.</p>`
+            ? `<p style="margin:8px 0 0;">Quedan ${r.pendientes} mes(es) más por traer: se trae uno por día solo, o volvé a apretar el botón.</p>`
             : "") +
           (r.jurisdiccionesOmitidas.length
             ? `<p style="margin:8px 0 0;"><small>Sin código de jurisdicción, no se sincronizaron: ${r.jurisdiccionesOmitidas.join(", ")}.</small></p>`
