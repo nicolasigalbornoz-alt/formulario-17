@@ -1,7 +1,7 @@
 // Sincronización automática desde la API de RAFAMOR SQL (lectura, se
 // regenera a diario con lo que baja RAFAMOR): mantiene al día `rafam_gastos`
 // sin depender de que alguien corra `sync-rafamor.mjs` en la PC de RAFAMOR.
-// La llaman la tarea programada del Worker (worker/index.mjs, cada 30 min) y
+// La llaman la tarea programada del Worker (worker/index.mjs, una vez por día) y
 // el botón "Sincronizar ahora" del panel (src/pages/api/admin/sync-rafamor.ts).
 //
 // Cada corrida trae UN mes: el más reciente para el que RAFAMOR SQL tenga una

@@ -2,7 +2,7 @@ import type { APIRoute } from "astro";
 import { sincronizarRafamorSql } from "../../../lib/sync-rafamor-sql";
 
 // Botón "Sincronizar ahora" del panel (Datos de RAFAM): la misma
-// sincronización que corre sola cada 30 minutos, para no esperar al horario.
+// sincronización que corre sola una vez por día, para no esperar al horario.
 // Protegido por el middleware (solo admin).
 export const POST: APIRoute = async ({ locals }) => {
   const env = locals.runtime.env;
